@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#426f79"><title>Afterboot Studio · ACE-Step</title>
+<link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+<div class="desktop-caption" aria-hidden="true"><span data-i18n="desktopCaption">afterboot / station de création musicale</span><span data-i18n="localSession">SESSION LOCALE</span></div>
+<div class="app-window">
+<div class="window-titlebar"><span class="window-icon" aria-hidden="true">♫</span><span>Afterboot Studio <span id="window-document" class="window-document">· Nouvelle composition</span></span><span class="window-edition" data-i18n="personalEdition">ÉDITION PERSONNELLE</span></div>
+<nav class="menubar" aria-label="Raccourcis du studio" data-i18n-aria="shortcuts">
+<a href="#create" data-i18n="compose">Composer</a><a href="#library" data-i18n="library">Bibliothèque</a><button type="button" id="help-button" aria-haspopup="dialog" data-i18n="connectionMenu">Connexion au moteur…</button>
+<label for="language" class="language-picker"><span data-i18n="language">Langue</span><select id="language"><option value="fr" lang="fr">Français</option><option value="en" lang="en">English</option></select></label><span>ACE-Step 1.5</span>
+</nav>
+<aside class="sidebar">
+<a href="#create" class="brand" aria-label="Afterboot Studio, accueil" data-i18n-aria="home"><span class="brand-mark" aria-hidden="true">♫</span><span>afterboot<span class="brand-sub" data-i18n="audioWorkstation">CRÉATION MUSICALE</span></span></a>
+<div class="workspace-label" data-i18n="studioFolders">Dossiers du studio</div>
+<nav aria-label="Navigation principale" data-i18n-aria="navigation">
+<a href="#create" class="nav-link active" data-nav="create"><span aria-hidden="true">♫</span> <span data-i18n="createTrack">Créer un morceau</span> <span class="nav-short">01</span></a>
+<a href="#library" class="nav-link" data-nav="library"><span aria-hidden="true">▤</span> <span data-i18n="library">Bibliothèque</span> <span id="nav-count" class="nav-short">0</span></a>
+</nav>
+<div class="session-note"><span class="mini-label" data-i18n="digitalAudio">AFTERBOOT AUDIO NUMÉRIQUE</span><div class="record" aria-hidden="true"><i></i></div><p data-i18n="nextSide">Votre prochaine face B.</p><span data-i18n="keepNote">Conservez l’audio, le prompt et la seed de chaque essai.</span></div>
+<button id="connection-button" class="connection" aria-haspopup="dialog"><span class="status-dot" id="status-dot"></span><span><strong id="connection-label">Connexion au moteur…</strong><small data-i18n="engineLocal">ACE-Step 1.5 · local</small></span><span aria-hidden="true">↗</span></button>
+</aside>
+<main>
+<header class="topbar"><span class="address-label" data-i18n="folder">Dossier</span><span class="address"><span aria-hidden="true">▣</span> Afterboot Studio / <span id="breadcrumb">création</span></span><span class="local-badge"><span aria-hidden="true">●</span> <span data-i18n="local">Local</span></span></header>
+<section id="create" class="view">
+<div class="page-heading"><div><p class="eyebrow" data-i18n="creationEyebrow">FICHIER / NOUVELLE COMPOSITION</p><h1 data-i18n="createTrack">Créer un morceau</h1><p class="lede" data-i18n="creationIntro">Décrivez la musique, réglez le tempo, puis lancez la génération.</p></div><div class="model-tag"><span class="small-signal" aria-hidden="true">▂ ▅ ▃ ▇ ▅ ▂</span><span>ACE-STEP 1.5<br><strong>TURBO</strong></span></div></div>
+<form id="generation-form" class="creation-grid">
+<section class="composer panel" aria-labelledby="composer-heading">
+<div class="panel-heading"><h2 id="composer-heading"><span class="section-number">01</span> <span data-i18n="direction">La direction musicale</span></h2><span class="quiet-label" data-i18n="instrumental">INSTRUMENTAL</span></div>
+<label for="track-title"><span data-i18n="trackName">Nom de l’essai</span> <span class="optional" data-i18n="optional">facultatif</span></label><input id="track-title" maxlength="100" placeholder="Ex. Une nuit devant le PC familial" data-i18n-placeholder="titlePlaceholder">
+<div class="prompt-heading"><label for="prompt" data-i18n="promptLabel">Décris ce que tu veux entendre</label><span id="prompt-count">0 caractères</span></div>
+<textarea id="prompt" required maxlength="6000" spellcheck="false"></textarea>
+<p class="field-note" data-i18n="promptHint">Genre, instruments, rythme, ambiance. Les descriptions en anglais sont un bon point de départ.</p>
+<div class="presets"><span data-i18n="startingPoint">Point de départ</span><button type="button" class="preset active" data-preset="jungle" data-i18n="presetJungle">Jungle nocturne</button><button type="button" class="preset" data-preset="liquid" data-i18n="presetLiquid">Liquid aérien</button><button type="button" class="preset" data-preset="ambient" data-i18n="presetAmbient">Ambient 90s</button></div>
+<details class="advanced"><summary><span data-i18n="generationOptions">Options de génération</span> <span aria-hidden="true">＋</span></summary><div class="advanced-fields"><label for="format"><span data-i18n="audioFormat">Format audio</span><select id="format"><option value="wav">WAV</option><option value="flac">FLAC</option><option value="mp3">MP3</option></select></label><label class="check-label"><input type="checkbox" id="thinking" checked><span><span data-i18n="planning">Planification musicale</span><small data-i18n="planningHint">Utilise le petit modèle 5Hz LM chargé par ACE-Step.</small></span></label></div></details>
+<div class="generate-footer"><span><span class="live-indicator" aria-hidden="true"></span> <span data-i18n="oneAtATime">Une génération à la fois</span></span><button id="generate" type="submit" class="primary"><span aria-hidden="true">▶</span> <span data-i18n="generate">Générer le morceau</span></button></div>
+</section>
+<section class="settings panel" aria-labelledby="settings-heading">
+<div class="panel-heading"><h2 id="settings-heading"><span class="section-number">02</span> <span data-i18n="settings">Les réglages</span></h2></div>
+<div class="setting-block"><label for="bpm"><span data-i18n="tempo">Tempo</span> <span>BPM</span></label><div class="number-field"><input type="number" id="bpm" min="30" max="300" value="170" required><span data-i18n="beatsPerMinute">temps / minute</span></div></div>
+<div class="setting-block"><label for="duration"><span data-i18n="duration">Durée</span> <span data-i18n="seconds">SECONDES</span></label><div class="number-field"><input type="number" id="duration" min="10" max="600" value="60" required><span id="duration-display">1 min 00</span></div><div class="duration-shortcuts"><button type="button" data-duration="60" class="selected" data-i18n="shortTake">Essai · 1 min</button><button type="button" data-duration="180" data-i18n="fullTrack">Morceau · 3 min</button></div></div>
+<div class="setting-block seed-block"><label for="seed"><span>Seed</span> <span data-i18n="seedHintLabel">TOUJOURS SOUS LA MAIN</span></label><div class="seed-control"><input type="number" id="seed" min="0" max="2147483647" value="12345" disabled><button type="button" id="roll-seed" aria-label="Choisir une nouvelle seed" data-i18n-aria="rollSeed">⤨</button></div><label class="check-label seed-check"><input type="checkbox" id="random-seed" checked><span data-i18n="randomSeed">Nouvelle seed à chaque morceau</span></label><p class="field-note" data-i18n="seedHint">Le numéro envoyé au moteur sera enregistré avec le résultat.</p></div>
+<div class="settings-note"><span aria-hidden="true">↳</span><p data-i18n="reuseHint">Tu aimes un résultat ? Retrouve ses réglages en un clic dans la bibliothèque.</p></div>
+</section>
+</form>
+<section id="activity" class="activity" hidden aria-live="polite"><div class="activity-spinner" aria-hidden="true"></div><div><strong id="activity-title" data-i18n="activityTitle">Le morceau se prépare</strong><p id="activity-detail" data-i18n="activityDetail">Génération en cours dans ACE-Step.</p></div><span id="elapsed" class="elapsed">0:00</span></section>
+<section class="recent-section" aria-labelledby="recent-heading"><div class="section-heading"><div><p class="eyebrow" data-i18n="listenEyebrow">ÉCOUTER, COMPARER, GARDER</p><h2 id="recent-heading" data-i18n="recent">Les derniers essais</h2></div><a href="#library" class="text-link"><span data-i18n="allLibrary">Toute la bibliothèque</span> <span aria-hidden="true">↗</span></a></div><div id="recent-tracks" class="track-list"></div></section>
+</section>
+<section id="library" class="view" hidden><div class="page-heading"><div><p class="eyebrow" data-i18n="libraryEyebrow">FICHIER / BIBLIOTHÈQUE</p><h1 data-i18n="libraryHeading">La bibliothèque</h1><p class="lede" data-i18n="libraryIntro">L’audio et les réglages de chaque morceau, au même endroit.</p></div></div><div class="library-toolbar"><label class="search-label" for="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Chercher un titre, un prompt ou une seed" aria-label="Rechercher dans la bibliothèque" data-i18n-placeholder="searchPlaceholder" data-i18n-aria="searchLabel"></label><button type="button" id="favorites-filter" class="secondary" aria-pressed="false" data-i18n="favorites">☆ Favoris</button><span id="library-count" class="quiet-label"></span></div><div class="file-list-heading"><span data-i18n="filesHeading">Morceaux et paramètres</span><span data-i18n="filesDetails">Audio / seed / date</span></div><div id="library-tracks" class="track-list"></div></section>
+<footer class="page-footer"><span data-i18n="localLibrary">Bibliothèque locale</span><span data-i18n="savedTogether">Audio + prompt + seed</span><span class="version">Afterboot Studio 0.4</span></footer>
+</main>
+</div>
+<footer class="desktop-taskbar"><a class="start-button" href="#create"><span aria-hidden="true">♫</span> afterboot</a><a class="task-button" href="#create">♫ Afterboot Studio</a><span class="taskbar-note" data-i18n="localMusic">Musique générée localement</span></footer>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="connection-dialog" aria-labelledby="connection-heading"><form method="dialog"><button class="dialog-close" aria-label="Fermer" data-i18n-aria="close">×</button></form><p class="eyebrow" data-i18n="localConnection">CONNEXION LOCALE</p><h2 id="connection-heading" data-i18n="engineBehind">Le moteur, en coulisses.</h2><p data-i18n="engineExplanation">Ce studio utilise l’API de ton installation ACE-Step. Le modèle reste chargé dans un seul moteur.</p><p data-i18n="engineInstructions">Sur ton Mac, arrête d’abord Gradio avec Ctrl+C, puis lance l’API dans son dossier :</p><pre>cd "$HOME/Applications/IA/ACE-Step-1.5"
+bash start_api_server_macos.sh</pre><p><span data-i18n="expectedAddress">Adresse attendue :</span> <code>http://127.0.0.1:8001</code></p><p class="field-note" data-i18n="firstLoadHint">Le premier chargement peut prendre quelques minutes. Le studio conservera les morceaux qu’il crée dans son dossier .data.</p><button type="button" id="recheck" class="primary"><span data-i18n="checkConnection">Vérifier la connexion</span> <span aria-hidden="true">↗</span></button><p id="connection-feedback" role="status"></p></dialog>
+<template id="empty-template"><div class="empty-state"><div class="empty-record" aria-hidden="true">◎</div><div><h3 data-i18n="emptyTitle">La première piste est à écrire.</h3><p data-i18n="emptyHint">Chaque morceau créé ici apparaîtra avec son audio, son prompt et sa seed.</p></div><span class="empty-index" aria-hidden="true">001</span></div></template>
+</body>
+</html>
