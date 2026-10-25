@@ -18,13 +18,18 @@ export function runFfmpeg(args, signal, errorCode = 'errorSessionMix') {
     child.on('error', error => reject(Object.assign(error, { code: errorCode })));
     child.on('close', code => {
       if (code !== 0) return reject(Object.assign(new Error('Audio processing failed: ' + diagnostics), { code: errorCode }));
+      const samples = [...progress.matchAll(/lavfi\.astats\.Overall\.Number_of_samples=(\d+)/g)];
+      if (samples.length) return resolve(Number(samples.at(-1)[1]) / 44100);
       const times = [...progress.matchAll(/out_time_us=(\d+)/g)];
       resolve(Number(times.at(-1)?.[1] || 0) / 1000000);
     });
   });
 }
 export async function audioDuration(path, signal, errorCode = 'errorTextureRender') {
-  const duration = await runFfmpeg(['-hide_banner', '-nostdin', '-i', path, '-map', '0:a:0', '-vn', '-progress', 'pipe:1', '-f', 'null', '-'], signal, errorCode);
+  // Older FFmpeg progress timestamps can point to the start of the final frame.
+  // Count decoded samples instead, at the same rate used by the output renderer.
+  const measure = 'aresample=44100,aformat=channel_layouts=mono,astats=metadata=1:reset=0:measure_perchannel=none:measure_overall=Number_of_samples,ametadata=mode=print:key=lavfi.astats.Overall.Number_of_samples:file=-';
+  const duration = await runFfmpeg(['-hide_banner', '-nostdin', '-i', path, '-map', '0:a:0', '-vn', '-af', measure, '-f', 'null', '-'], signal, errorCode);
   if (!Number.isFinite(duration) || duration <= 0) throw Object.assign(new Error('Invalid audio duration'), { code: errorCode });
   return duration;
 }
