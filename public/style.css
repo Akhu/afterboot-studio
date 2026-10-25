@@ -338,6 +338,13 @@ dialog .primary { width: 100%; margin-top: 18px; }
 .bpm-range { display: grid; grid-template-columns: 1fr 1fr; max-width: 400px; gap: 12px; margin-top: 10px; }
 .bpm-range input { display: block; width: 100%; margin-top: 6px; font: 14px var(--mono); }
 .texture-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: center; }
+.background-options { grid-column: 1 / -1; border-top: 1px solid #b7b8a8; padding-top: 14px; margin-top: 4px; }
+#mix-requirement { grid-column: 1 / -1; }
+.background-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; }
+.background-controls label { display: block; }
+#background-volume { width: 100%; accent-color: var(--accent, #d4582b); }
+#background-volume-display { float: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) { .background-controls { grid-template-columns: 1fr; gap: 14px; } }
 .texture-options summary { padding: 5px 0; font-weight: bold; }
 .texture-options > .field-note { margin-top: 10px; }
 .track-plan { padding-left: 25px; margin-top: 0; font: 10px/1.9 var(--mono); }

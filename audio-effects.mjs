@@ -1,10 +1,12 @@
 import { renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { runFfmpeg } from './audio-mix.mjs';
+import { appendBackground } from './audio-background.mjs';
+import { hasBackground } from './public/background-noise.js';
 
 export async function renderTexture(track, texture, dataDir, signal) {
-  if (texture.grain === 'off' && !texture.events.length) return {};
-  const file = track.id + '-vintage.wav';
+  if (texture.grain === 'off' && !texture.events.length && !hasBackground(texture.background)) return {};
+  const file = track.id + (hasBackground(texture.background) ? '-background.wav' : '-vintage.wav');
   const output = join(dataDir, 'audio', file);
   const temporary = output + '.tmp';
   const filters = ['[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[clean]'];
@@ -25,6 +27,7 @@ export async function renderTexture(track, texture, dataDir, signal) {
     filters.push('[body][hiss]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97:level=0:latency=1[textured]');
     previous = 'textured';
   }
+  previous = appendBackground(filters, previous, texture.background, track.input.duration, texture.noiseSeed);
   const args = ['-hide_banner', '-nostdin', '-y', '-filter_complex_threads', '1', '-i', join(dataDir, 'audio', track.audioFile),
     '-filter_complex', filters.join(';'), '-map', '[' + previous + ']', '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le',
     '-progress', 'pipe:1', '-f', 'wav', temporary];

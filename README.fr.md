@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.6.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.7.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -24,6 +24,7 @@ La version 0.6.0 est une préversion. La génération d'un morceau a été signa
 - Accès depuis un autre ordinateur du réseau privé.
 - Sessions de 30, 40 ou 60 minutes de musique, en pistes séparées ou en mix WAV avec fondus.
 - BPM tiré au hasard dans une plage pour chaque piste, avec grain et sauts façon CD facultatifs sur une copie de l'audio.
+- Fond sonore continu blanc, rose, brun ou sombre, avec un volume réglable, y compris pendant les transitions du mix.
 
 Changer la langue conserve les prompts, titres et réglages. Les prompts des préréglages restent en anglais. Les messages bruts du moteur conservent leur langue d'origine.
 
@@ -101,7 +102,7 @@ Le champ de durée devient le maximum par piste. Commence avec 180 secondes pour
 
 ACE-Step accepte jusqu'à [600 secondes par génération](https://github.com/ace-step/ACE-Step-1.5#-features). Un mix de 30–40 minutes assemble donc plusieurs pistes indépendantes. Les fondus adoucissent les transitions ; ils ne garantissent ni un calage sur les temps ni une composition continue. Le plan ajoute assez d'audio source pour compenser les recouvrements des fondus.
 
-**FFmpeg est nécessaire pour le mix assemblé et les effets vintage**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées sans effets, même avec des BPM aléatoires, fonctionnent sans lui. Sur macOS :
+**FFmpeg est nécessaire pour le mix assemblé, le fond sonore et les effets vintage**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées sans effets, même avec des BPM aléatoires, fonctionnent sans lui. Sur macOS :
 
 ~~~bash
 brew install ffmpeg
@@ -112,6 +113,16 @@ Redémarre le studio après l'installation. L'interface indique si FFmpeg est di
 La file fonctionne sur le serveur, une piste à la fois, même si le navigateur est fermé. Pause et arrêt prennent effet après la sauvegarde de la piste en cours. Une session en pause réserve la file jusqu'à sa reprise ou son arrêt. Après un redémarrage du serveur, les sessions inachevées restent en pause et doivent être reprises explicitement. Garde le studio et le moteur ouverts, et empêche la mise en veille de la machine pendant la session.
 
 Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
+
+## Ajouter un fond sonore continu
+
+![Réglages du fond sonore continu](docs/screenshots/background-fr.png)
+
+Dans l'écran de création, choisis **Fond sonore continu** : **Bruit blanc**, **Bruit rose**, **Bruit brun** ou **Bruit sombre · brun filtré**. Le bruit sombre est un bruit brun filtré entre 20 et 180 Hz. Le curseur règle le gain du générateur de bruit de -60 à -12 dB, avec -32 dB par défaut. Les couleurs de bruit peuvent sembler plus ou moins fortes au même réglage. Choisis **Désactivé** pour retirer le fond. Il est désactivé par défaut.
+
+Le fond est intégré au fichier audio exporté. Pour un mix long, un seul flux de bruit est ajouté après l'assemblage : il traverse tous les fondus, sans redémarrage ni baisse de volume entre les pistes. Pour un morceau seul ou une session de pistes séparées, chaque copie WAV contient son propre bruit continu. Les fichiers du moteur restent téléchargeables avec **Original**. Le type, le volume et la seed du bruit sont sauvegardés avec les paramètres de la piste ou de la session.
+
+Le fond sonore est indépendant de la probabilité des effets vintage et ajouté après les sauts CD, qui ne l'interrompent donc pas. Un limiteur protège la sortie contre l'écrêtage. Ce réglage ajoute uniquement du bruit ; les nappes musicales sans beats restent à générer séparément. Les fichiers déjà présents dans la bibliothèque ne sont pas modifiés. FFmpeg est nécessaire.
 
 ## Varier les tempos et ajouter une texture vintage
 

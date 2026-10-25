@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { appendBackground } from './audio-background.mjs';
 
 const executable = () => process.env.FFMPEG_PATH || 'ffmpeg';
 export function ffmpegAvailable() {
@@ -37,6 +38,7 @@ export async function assembleMix(session, tracks, dataDir, signal) {
       : 'concat=n=2:v=0:a=1') + '[' + next + ']');
     previous = next;
   }
+  previous = appendBackground(filters, previous, session.plan.background, session.plan.targetSeconds, session.input?.seed ?? 1);
   args.push('-filter_complex', filters.join(';'), '-map', '[' + previous + ']', '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le', '-progress', 'pipe:1', '-f', 'wav', temporary);
   try {
     const duration = await runFfmpeg(args, signal);

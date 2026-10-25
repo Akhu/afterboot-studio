@@ -9,6 +9,7 @@ import { sessionPlan } from './public/session-plan.js';
 import { createSessionManager } from './session-manager.mjs';
 import { assembleMix, ffmpegAvailable } from './audio-mix.mjs';
 import { renderTexture } from './audio-effects.mjs';
+import { backgroundNoise, hasBackground } from './public/background-noise.js';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -36,7 +37,7 @@ export function generationInput(input) {
   if (!['wav', 'flac', 'mp3'].includes(input.format)) throw new UserError('errorFormat');
   return {
     title, duration, bpm, seed, thinking: input.thinking, format: input.format,
-    prompt, model: 'acestep-v15-turbo',
+    prompt, model: 'acestep-v15-turbo', background: backgroundNoise(input.background),
   };
 }
 
@@ -115,15 +116,28 @@ export function createStudio({
     return value.data ?? value;
   }
   function publicTrack(track) {
-    return { ...track, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio${track.processedAudioFile ? '?version=vintage' : ''}` : null,
+    const version = hasBackground(track.texture?.background) ? 'background' : 'vintage';
+    return { ...track, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio${track.processedAudioFile ? '?version=' + version : ''}` : null,
       audioFormat: track.processedAudioFile ? 'wav' : track.input.format,
       originalAudioURL: track.processedAudioFile ? `/api/tracks/${track.id}/audio?original=1` : null,
       audioFile: undefined, processedAudioFile: undefined };
+  }
+  async function finishDownloadedTrack(track) {
+    if (!track.sessionId && hasBackground(track.input.background) && !track.processedAudioFile) {
+      try {
+        await processTrack(track, { grain: 'off', events: [], noiseSeed: track.input.seed, background: track.input.background });
+      } catch (error) { throw new UserError('errorBackgroundRender', 502); }
+    }
+    Object.assign(track, { status: 'ready', completedAt: new Date().toISOString() });
+    save();
+    return track;
   }
   async function syncTrack(track) {
     if (track.status !== 'pending') return track;
     if (active.has(track.id)) return active.get(track.id);
     const operation = (async () => {
+      // A failed background render retries the archived audio, never the model.
+      if (track.audioFile) return finishDownloadedTrack(track);
       const jobs = await engine('/query_result', { task_id_list: [track.taskId] });
       if (!Array.isArray(jobs)) throw new UserError('errorJobResponse', 502);
       const job = jobs.find(value => value.task_id === track.taskId);
@@ -155,11 +169,11 @@ export function createStudio({
       writeFileSync(join(dataDir, 'audio', `${audioFile}.tmp`), buffer);
       renameSync(join(dataDir, 'audio', `${audioFile}.tmp`), join(dataDir, 'audio', audioFile));
       Object.assign(track, {
-        status: 'ready', completedAt: new Date().toISOString(), audioFile,
+        audioFile,
         returnedSeed: result.seed_value ?? null, engineResult: result,
       });
       save();
-      return track;
+      return finishDownloadedTrack(track);
     })();
     active.set(track.id, operation);
     try { return await operation; } finally { active.delete(track.id); }
@@ -194,7 +208,7 @@ export function createStudio({
         const body = await jsonBody(req);
         if (generationSubmitting) throw new UserError('errorSessionBusy', 409);
         const plan = sessionPlan(body);
-        const input = generationInput({ ...body.input, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
+        const input = generationInput({ ...body.input, background: { type: 'off' }, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
         return respond(res, 202, sessions.start(input, plan));
       }
       const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio)$/);
@@ -215,6 +229,7 @@ export function createStudio({
       }
       if (req.method === 'POST' && url.pathname === '/api/generate') {
         const input = generationInput(await jsonBody(req));
+        if (hasBackground(input.background) && !canMix) throw new UserError('errorFfmpeg');
         if (sessions.busy() || generationSubmitting) throw new UserError('errorSessionBusy', 409);
         generationSubmitting = true;
         try { return respond(res, 202, publicTrack(await submitTrack(input))); }
@@ -242,7 +257,7 @@ export function createStudio({
           const size = statSync(path).size;
           const types = { wav: 'audio/wav', flac: 'audio/flac', mp3: 'audio/mpeg' };
           const headers = { 'Content-Type': types[format], 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400', Vary: 'Range' };
-          if (url.searchParams.has('download')) headers['Content-Disposition'] = `attachment; filename="${track.id}${processed ? '-vintage' : ''}.${format}"`;
+          if (url.searchParams.has('download')) headers['Content-Disposition'] = `attachment; filename="${track.id}${processed ? hasBackground(track.texture?.background) ? '-background' : '-vintage' : ''}.${format}"`;
           if (req.headers.range) {
             const parts = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
             const start = parts ? Number(parts[1]) : NaN;
@@ -257,7 +272,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });

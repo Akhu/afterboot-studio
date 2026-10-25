@@ -1,5 +1,6 @@
 import { translate, preferredLanguage } from '/i18n.js';
 import { sessionPlan } from '/session-plan.js';
+import { hasBackground } from '/background-noise.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -78,11 +79,12 @@ function formValues() {
     generationMode: $('generation-mode').value, sessionMinutes: Number($('session-minutes').value), crossfadeSeconds: Number($('crossfade').value),
     tempo: { enabled: $('vary-bpm').checked, min: Number($('bpm-min').value), max: Number($('bpm-max').value) },
     texture: { grain: $('grain').value, cdSkips: $('cd-skips').checked, chance: Number($('texture-chance').value) },
+    background: { type: $('background-type').value, levelDb: Number($('background-volume').value) },
   };
 }
 function sessionOptions(values = formValues()) {
   return { mode: values.generationMode, minutes: values.sessionMinutes, segmentSeconds: values.duration,
-    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture };
+    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture, background: values.background };
 }
 function updateForm() {
   $('prompt-count').textContent = t('characters', { count: $('prompt').value.length });
@@ -102,8 +104,11 @@ function updateForm() {
   $('bpm-range-display').textContent = $('bpm-min').value + '–' + $('bpm-max').value;
   $('crossfade-option').hidden = mode !== 'mix';
   const values = formValues();
+  $('background-volume').disabled = !hasBackground(values.background);
+  $('background-volume-display').textContent = values.background.levelDb + ' dB';
+  $('background-volume').setAttribute('aria-valuetext', values.background.levelDb + ' dB');
   const effectsEnabled = values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips);
-  $('mix-requirement').hidden = mode === 'single' || (mode !== 'mix' && !effectsEnabled);
+  $('mix-requirement').hidden = !hasBackground(values.background) && (mode === 'single' || (mode !== 'mix' && !effectsEnabled));
   $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
   if (mode !== 'single') {
     try {
@@ -136,13 +141,15 @@ function setForm(input) {
   $('grain').value = input.texture?.grain || 'off';
   $('cd-skips').checked = input.texture?.cdSkips ?? false;
   $('texture-chance').value = input.texture?.chance ?? 35;
+  $('background-type').value = input.background?.type || 'off';
+  $('background-volume').value = input.background?.levelDb ?? -32;
   updateForm();
 }
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
 function restore(track, variation) {
   const returnedSeed = Number(seedOf(track).split(',')[0]);
   setForm({
-    ...track.input, title: track.input.title + (variation ? t('variationSuffix') : ''),
+    ...track.input, background: track.texture?.background || track.input.background, title: track.input.title + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
   });
@@ -161,7 +168,12 @@ function textureDescription(texture) {
   const parts = [];
   if (texture?.grain && texture.grain !== 'off') parts.push(t(texture.grain === 'worn' ? 'grainWorn' : 'grainLight'));
   if (texture?.events?.length) parts.push(t('cdSkips'));
+  if (hasBackground(texture?.background)) parts.push(backgroundDescription(texture.background));
   return parts.join(' · ');
+}
+function backgroundDescription(background) {
+  const key = { white: 'noiseWhite', pink: 'noisePink', brown: 'noiseBrown', dark: 'noiseDark' }[background.type];
+  return t(key) + ' · ' + background.levelDb + ' dB';
 }
 function audioCard(track) {
   const card = node('article', 'track');
@@ -257,6 +269,7 @@ function renderSessions() {
   for (const session of sessions) {
     const card = node('article', 'session-card');
     card.append(node('h3', '', session.input.title));
+    if (hasBackground(session.plan.background)) card.append(node('p', 'field-note', backgroundDescription(session.plan.background)));
     card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 })));
     const progress = node('progress');
     progress.max = session.plan.durations.length; progress.value = session.completedCount;
@@ -319,7 +332,7 @@ function updateActivity() {
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
   const values = formValues();
-  const needsFfmpeg = values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips)));
+  const needsFfmpeg = hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
   let invalidPlan = false;
   if (values.generationMode !== 'single') {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }

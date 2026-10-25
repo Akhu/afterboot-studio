@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createTrackSettings, needsTexture, trackPrompt } from './session-settings.mjs';
+import { hasBackground } from './public/background-noise.js';
 
 const terminal = new Set(['complete', 'stopped']);
 function fail(code, status = 409) { throw Object.assign(new Error(code), { code, status }); }
@@ -48,7 +49,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
         if (track.status === 'pending') return;
         if (track.status === 'failed') fail('errorSessionTrack');
         const texture = session.trackSettings?.[session.nextIndex]?.texture;
-        if (texture && (texture.grain !== 'off' || texture.events.length) && !track.processedAudioFile) {
+        if (texture && (texture.grain !== 'off' || texture.events.length || hasBackground(texture.background)) && !track.processedAudioFile) {
           await processTrack(track, texture, controller.signal);
           if (closed) return;
         }

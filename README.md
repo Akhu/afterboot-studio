@@ -10,7 +10,7 @@ Independent community UI. ACE-Step runs separately and provides all music genera
 
 ## Preview status
 
-Version 0.6.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.7.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -24,6 +24,7 @@ Version 0.6.0 is an early preview. Single-track generation has been reported wor
 - Open the studio from another computer on your private network.
 - Queue 30, 40 or 60 minutes of music, as separate tracks or one WAV mix with crossfades.
 - Randomize each track's requested BPM within a range, and optionally add grain and occasional CD-style skips to a separate audio copy.
+- Add continuous white, pink, brown or dark background noise with adjustable volume, including across mix transitions.
 
 Switching UI languages preserves prompts, titles and settings. Preset prompts stay in English. Raw engine messages retain their original language.
 
@@ -101,7 +102,7 @@ The duration field is the maximum length of an individual track. Start with 180 
 
 ACE-Step supports up to [600 seconds per generation](https://github.com/ace-step/ACE-Step-1.5#-features). A 30–40 minute mix is assembled from independently generated tracks. Crossfades soften the transitions; they do not provide beat matching or guarantee continuous composition. The planner adds enough source audio to compensate for overlapping fades.
 
-**FFmpeg is required for assembled mixes and vintage effects**, on the computer running the Node studio. Separate-track sessions without effects, including random BPM, work without it. On macOS:
+**FFmpeg is required for assembled mixes, background noise and vintage effects**, on the computer running the Node studio. Separate-track sessions without effects, including random BPM, work without it. On macOS:
 
 ~~~bash
 brew install ffmpeg
@@ -112,6 +113,16 @@ Restart the studio after installing FFmpeg. The UI reports whether it is availab
 The queue runs on the server, one track at a time, even with the browser closed. Pause and stop take effect after the current track is saved. A paused session reserves the queue until resumed or stopped. After a server restart, unfinished sessions are paused; resume them explicitly. Keep the studio and engine running and prevent the host computer from sleeping during a session.
 
 Tracks, session plans, seeds and progress are saved in .data. Engine failures pause the session. A submission with an uncertain response is not retried automatically because the engine may already have accepted it. Check ACE-Step before stopping that session and creating another. Already saved tracks are never regenerated on resume. If assembly fails or an engine output is too short to meet the target, all original tracks are retained.
+
+## Add continuous background noise
+
+![Continuous background noise controls](docs/screenshots/background-en.png)
+
+Choose **Continuous background noise** in the creation screen: **White noise**, **Pink noise**, **Brown noise**, or **Dark noise · filtered brown**. Dark noise uses brown noise with a 20 Hz high-pass and a 180 Hz low-pass. The volume slider adjusts the noise generator's gain from -60 to -12 dB, defaulting to -32 dB. Different colors can sound different in loudness at the same setting. Choose **Off** to remove the background. It is off by default.
+
+The background is rendered into the audio export. For a long mix, one seeded stream is added after assembly and continues across every crossfade, without resets or volume dips at track boundaries. For a single track or separate-track session, each processed WAV contains its own continuous noise stream. Original engine files remain available through **Original**. The noise type, gain and seed are saved with the track or session settings.
+
+Background noise is independent of vintage-effect probability and is added after CD skips, so those effects do not interrupt it. A limiter protects the output from clipping. This adds a noise bed only; beatless musical pads still need to be generated separately. Existing library files are not changed. Requires FFmpeg.
 
 ## Vary tempos and add vintage texture
 
