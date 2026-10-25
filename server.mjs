@@ -11,6 +11,8 @@ import { assembleMix, ffmpegAvailable } from './audio-mix.mjs';
 import { renderTexture } from './audio-effects.mjs';
 import { backgroundNoise, hasBackground } from './public/background-noise.js';
 import { endingSettings, hasEnding, musicalEndingPrompt } from './public/ending.js';
+import { inferenceSettings, arrangementPrompt } from './public/inference-settings.js';
+import { masteringSettings, hasMastering } from './public/mastering.js';
 import { createSessionExporter } from './session-export.mjs';
 import { safeFileStem, sessionTrackTitle, sessionTrackFilename } from './public/session-names.js';
 
@@ -45,18 +47,20 @@ export function generationInput(input) {
   if (!['wav', 'flac', 'mp3'].includes(input.format)) throw new UserError('errorFormat');
   return {
     title, duration, bpm, seed, thinking: input.thinking, format: input.format,
-    prompt, model: 'acestep-v15-turbo', background: backgroundNoise(input.background), ending: endingSettings(input.ending),
+    prompt, inference: inferenceSettings(input.inference), mastering: masteringSettings(input.mastering), model: 'acestep-v15-turbo', background: backgroundNoise(input.background), ending: endingSettings(input.ending),
   };
 }
 
 function enginePayload(input) {
+  const inference = inferenceSettings(input.inference);
   return {
-    prompt: musicalEndingPrompt(input.prompt, input.ending, input.duration), lyrics: '[Instrumental]', vocal_language: 'unknown',
+    prompt: musicalEndingPrompt(arrangementPrompt(input.prompt, input.inference), input.ending, input.duration), lyrics: '[Instrumental]', vocal_language: 'unknown',
     audio_duration: input.duration, bpm: input.bpm, time_signature: '4',
     model: input.model, task_type: 'text2music', batch_size: 1,
     audio_format: input.format, inference_steps: 8, thinking: input.thinking,
     use_random_seed: false, seed: input.seed,
     use_cot_caption: false, use_cot_language: false,
+    ...(input.thinking ? { lm_temperature: inference.temperature, lm_top_p: inference.topP, lm_top_k: inference.topK } : {}),
     lm_backend: process.platform === 'darwin' ? 'mlx' : 'pt',
   };
 }
@@ -124,7 +128,7 @@ export function createStudio({
     }
     return value.data ?? value;
   }
-  const processingVersion = track => hasEnding(track.texture?.ending) ? 'finished' : hasBackground(track.texture?.background) ? 'background' : 'vintage';
+  const processingVersion = track => hasEnding(track.texture?.ending) ? 'finished' : hasBackground(track.texture?.background) ? 'background' : hasMastering(track.texture?.mastering) ? 'mastered' : 'vintage';
   function publicTrack(track) {
     const version = processingVersion(track);
     const session = track.sessionId ? sessions.get(track.sessionId) : null;
@@ -135,10 +139,10 @@ export function createStudio({
       audioFile: undefined, processedAudioFile: undefined };
   }
   async function finishDownloadedTrack(track) {
-    if (!track.sessionId && (hasBackground(track.input.background) || hasEnding(track.input.ending)) && !track.processedAudioFile) {
+    if (!track.sessionId && (hasBackground(track.input.background) || hasEnding(track.input.ending) || hasMastering(track.input.mastering)) && !track.processedAudioFile) {
       try {
-        await processTrack(track, { grain: 'off', events: [], noiseSeed: track.input.seed, background: track.input.background, ending: track.input.ending });
-      } catch (error) { throw new UserError(hasEnding(track.input.ending) ? 'errorEndingRender' : 'errorBackgroundRender', 502); }
+        await processTrack(track, { grain: 'off', events: [], noiseSeed: track.input.seed, background: track.input.background, ending: track.input.ending, mastering: track.input.mastering });
+      } catch (error) { throw new UserError(hasMastering(track.input.mastering) ? 'errorMasteringRender' : hasEnding(track.input.ending) ? 'errorEndingRender' : 'errorBackgroundRender', 502); }
     }
     Object.assign(track, { status: 'ready', completedAt: new Date().toISOString() });
     save();
@@ -223,7 +227,7 @@ export function createStudio({
         const body = await jsonBody(req);
         if (generationSubmitting || finishing) throw new UserError('errorSessionBusy', 409);
         const plan = sessionPlan(body);
-        const input = generationInput({ ...body.input, background: { type: 'off' }, ending: { seconds: 0 }, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
+        const input = generationInput({ ...body.input, background: { type: 'off' }, ending: { seconds: 0 }, mastering: plan.mastering, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
         return respond(res, 202, sessions.start(input, plan));
       }
       const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio|mp3)$/);
@@ -254,7 +258,7 @@ export function createStudio({
       }
       if (req.method === 'POST' && url.pathname === '/api/generate') {
         const input = generationInput(await jsonBody(req));
-        if ((hasBackground(input.background) || hasEnding(input.ending)) && !canMix) throw new UserError('errorFfmpeg');
+        if ((hasBackground(input.background) || hasEnding(input.ending) || hasMastering(input.mastering)) && !canMix) throw new UserError('errorFfmpeg');
         if (sessions.busy() || generationSubmitting || finishing) throw new UserError('errorSessionBusy', 409);
         generationSubmitting = true;
         try { return respond(res, 202, publicTrack(await submitTrack(input))); }
@@ -317,7 +321,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/inference-settings.js': ['inference-settings.js', '.js'], '/mastering.js': ['mastering.js', '.js'], '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });

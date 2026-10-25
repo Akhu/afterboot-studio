@@ -1,6 +1,8 @@
 import { translate, preferredLanguage } from '/i18n.js';
 import { sessionPlan } from '/session-plan.js';
 import { hasBackground } from '/background-noise.js';
+import { stableArrangement, inferenceSettings } from '/inference-settings.js';
+import { hasMastering, masteringSettings } from '/mastering.js';
 import { hasEnding } from '/ending.js';
 import { completedSessionTracks, sessionTrackTitle } from '/session-names.js';
 
@@ -79,6 +81,8 @@ function formValues() {
     bpm: Number($('bpm').value), duration: Number($('duration').value),
     randomSeed: $('random-seed').checked, seed: Number($('seed').value),
     thinking: $('thinking').checked, format: $('format').value,
+    inference: { temperature: Number($('lm-temperature').value), topP: Number($('lm-top-p').value), topK: Number($('lm-top-k').value), arrangement: $('arrangement').value },
+    mastering: { enabled: $('mastering-enabled').checked, targetLufs: Number($('target-lufs').value), compression: $('gentle-compression').checked },
     generationMode: $('generation-mode').value, sessionMinutes: Number($('session-minutes').value), crossfadeSeconds: Number($('crossfade').value),
     tempo: { enabled: $('vary-bpm').checked, min: Number($('bpm-min').value), max: Number($('bpm-max').value) },
     texture: { grain: $('grain').value, cdSkips: $('cd-skips').checked, chance: Number($('texture-chance').value) },
@@ -88,7 +92,7 @@ function formValues() {
 }
 function sessionOptions(values = formValues()) {
   return { mode: values.generationMode, minutes: values.sessionMinutes, segmentSeconds: values.duration,
-    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture, background: values.background, ending: values.ending };
+    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture, background: values.background, ending: values.ending, mastering: values.mastering };
 }
 function updateForm() {
   $('prompt-count').textContent = t('characters', { count: $('prompt').value.length });
@@ -110,11 +114,13 @@ function updateForm() {
   $('bpm-range-display').textContent = $('bpm-min').value + '–' + $('bpm-max').value;
   $('crossfade-option').hidden = mode !== 'mix';
   const values = formValues();
+  for (const id of ['lm-temperature', 'lm-top-p', 'lm-top-k']) $(id).disabled = !values.thinking;
+  $('target-lufs').disabled = $('gentle-compression').disabled = !hasMastering(values.mastering);
   $('background-volume').disabled = !hasBackground(values.background);
   $('background-volume-display').textContent = values.background.levelDb + ' dB';
   $('background-volume').setAttribute('aria-valuetext', values.background.levelDb + ' dB');
   const effectsEnabled = values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips);
-  $('mix-requirement').hidden = !hasEnding(values.ending) && !hasBackground(values.background) && (mode === 'single' || (mode !== 'mix' && !effectsEnabled));
+  $('mix-requirement').hidden = !hasMastering(values.mastering) && !hasEnding(values.ending) && !hasBackground(values.background) && (mode === 'single' || (mode !== 'mix' && !effectsEnabled));
   $('ending-hint').textContent = t(mode === 'mix' ? 'endingMixHint' : 'endingHint');
   $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
   if (mode !== 'single') {
@@ -139,6 +145,13 @@ function setForm(input) {
   $('random-seed').checked = input.randomSeed ?? true;
   $('thinking').checked = input.thinking ?? true;
   $('format').value = input.format || 'wav';
+  $('lm-temperature').value = input.inference?.temperature ?? 0.85;
+  $('lm-top-p').value = input.inference?.topP ?? 0.9;
+  $('lm-top-k').value = input.inference?.topK ?? 0;
+  $('arrangement').value = input.inference?.arrangement ?? '';
+  $('mastering-enabled').checked = input.mastering?.enabled ?? false;
+  $('target-lufs').value = input.mastering?.targetLufs ?? -18;
+  $('gentle-compression').checked = input.mastering?.compression ?? true;
   $('generation-mode').value = input.generationMode || 'single';
   $('session-minutes').value = input.sessionMinutes || 30;
   $('crossfade').value = input.crossfadeSeconds ?? 4;
@@ -163,7 +176,7 @@ function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); 
 function restore(track, variation) {
   const returnedSeed = Number(seedOf(track).split(',')[0]);
   setForm({
-    ...track.input, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: (track.displayTitle || track.input.title) + (variation ? t('variationSuffix') : ''),
+    ...track.input, mastering: track.texture?.mastering || track.input.mastering, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: (track.displayTitle || track.input.title) + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
   });
@@ -183,6 +196,7 @@ function textureDescription(texture) {
   if (texture?.grain && texture.grain !== 'off') parts.push(t(texture.grain === 'worn' ? 'grainWorn' : 'grainLight'));
   if (texture?.events?.length) parts.push(t('cdSkips'));
   if (hasBackground(texture?.background)) parts.push(backgroundDescription(texture.background));
+  if (hasMastering(texture?.mastering)) parts.push(t('masteringSummary', { lufs: texture.mastering.targetLufs }));
   if (hasEnding(texture?.ending)) parts.push(t('endingSummary', { seconds: texture.ending.seconds }));
   return parts.join(' · ');
 }
@@ -297,6 +311,7 @@ function renderSessions() {
   for (const session of sessions) {
     const card = node('article', 'session-card');
     card.append(node('h3', '', session.input.title));
+    if (hasMastering(session.plan.mastering)) card.append(node('p', 'field-note', t('masteringSummary', { lufs: session.plan.mastering.targetLufs })));
     if (hasBackground(session.plan.background)) card.append(node('p', 'field-note', backgroundDescription(session.plan.background)));
     if (hasEnding(session.plan.ending)) card.append(node('p', 'field-note', t('endingSummary', { seconds: session.plan.ending.seconds })));
     card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 })));
@@ -383,8 +398,9 @@ function updateActivity() {
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
   const values = formValues();
-  const needsFfmpeg = hasEnding(values.ending) || hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
+  const needsFfmpeg = hasMastering(values.mastering) || hasEnding(values.ending) || hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
   let invalidPlan = false;
+  try { inferenceSettings(values.inference); masteringSettings(values.mastering); } catch { invalidPlan = true; }
   if (values.generationMode !== 'single') {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }
   }
@@ -445,6 +461,14 @@ function route() {
   $('window-document').textContent = t(selected === 'library' ? 'windowLibrary' : 'windowCreate');
   document.querySelectorAll('audio').forEach(audio => { if (audio.closest('.view').hidden) audio.pause(); });
 }
+$('apply-stable').addEventListener('click', () => {
+  $('thinking').checked = true;
+  $('lm-temperature').value = 0.7; $('lm-top-p').value = 0.9; $('lm-top-k').value = 0;
+  $('arrangement').value = stableArrangement;
+  $('mastering-enabled').checked = true; $('target-lufs').value = -18; $('gentle-compression').checked = true;
+  $('duration').value = 120;
+  updateForm(); toast(t('stableApplied'));
+});
 $('generation-form').addEventListener('input', updateForm);
 $('generation-form').addEventListener('change', updateForm);
 $('generation-form').addEventListener('submit', async (event) => {

@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { appendBackground } from './audio-background.mjs';
+import { appendPeakGuard } from './audio-mastering.mjs';
 import { appendEnding } from './audio-ending.mjs';
 import { hasEnding, endingSeconds } from './public/ending.js';
 
@@ -56,6 +57,7 @@ export async function assembleMix(session, tracks, dataDir, signal) {
     previous = next;
   }
   previous = appendBackground(filters, previous, session.plan.background, session.plan.targetSeconds, session.input?.seed ?? 1);
+  previous = appendPeakGuard(filters, previous, session.plan.mastering);
   previous = appendEnding(filters, previous, session.plan.ending, finalSeconds);
   args.push('-filter_complex', filters.join(';'), '-map', '[' + previous + ']', '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le', '-progress', 'pipe:1', '-f', 'wav', temporary);
   try {

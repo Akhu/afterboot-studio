@@ -10,7 +10,7 @@ Independent community UI. ACE-Step runs separately and provides all music genera
 
 ## Preview status
 
-Version 0.9.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.10.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -116,6 +116,20 @@ Restart the studio after installing FFmpeg. The UI reports whether it is availab
 The queue runs on the server, one track at a time, even with the browser closed. Pause and stop take effect after the current track is saved. A paused session reserves the queue until resumed or stopped. After a server restart, unfinished sessions are paused; resume them explicitly. Keep the studio and engine running and prevent the host computer from sleeping during a session.
 
 Tracks, session plans, seeds and progress are saved in .data. Engine failures pause the session. A submission with an uncertain response is not retried automatically because the engine may already have accepted it. Check ACE-Step before stopping that session and creating another. Already saved tracks are never regenerated on resume. If assembly fails or an engine output is too short to meet the target, all original tracks are retained.
+
+## Control inference and export loudness
+
+![Inference and loudness controls](docs/screenshots/inference-en.png)
+
+Open **Inference and loudness** below the prompt. **Apply** under **Stable ambience** enables music planning with temperature **0.7**, top-p **0.9**, top-k **0**, adds editable arrangement instructions, sets the maximum track duration to **120 seconds**, and enables loudness matching at **-18 LUFS** with gentle compression. Your prompt, BPM range, seeds, output mode, noise and ending settings remain as selected. You can adjust each setting afterwards. In a long session, track lengths are balanced to reach the total duration and stay within that maximum.
+
+Temperature accepts 0–2, top-p greater than 0 up to 1, and top-k integers 0–1000. Top-p 1 and top-k 0 disable their respective sampling filters. These three controls apply only with music planning enabled; the UI disables them otherwise. Arrangement instructions are appended independently of planning, before any outro request. Your original prompt stays intact and `generationPrompt` records the full request. Check for conflicting prompt instructions. ACE-Step may still increase rhythmic density; these controls cannot guarantee a calm track. Start with 90–180 second tracks and listen before assembling a long video.
+
+Turbo keeps its recommended **8 diffusion steps**, and prompt rewriting stays disabled. No diffusion CFG slider is offered because Turbo overrides that parameter. Sampling controls are supported by the official MLX and PyTorch LM backends. See the [ACE-Step inference documentation](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/INFERENCE.md) and [REST API parameters](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/API.md).
+
+**Export loudness** is separate from musical composition. Enable loudness matching, choose a target from **-24 to -14 LUFS**, and optionally enable gentle compression. FFmpeg first applies any vintage effects, then a 2:1 compressor when selected. A two-pass `loudnorm` analysis/render matches integrated music loudness with an 11 LU loudness-range target and a -1.5 dBTP ceiling. FFmpeg may use dynamic normalization when linear gain cannot meet those constraints. A final oversampled limiter protects the combined music and noise at -1 dB before the ending fade. This reduces level differences; it does not make every moment equally loud or change the rhythm. Silence stays silent. Noise, fades, crossfades and MP3 encoding can change the measured loudness of the final export.
+
+Each track is processed before mix assembly, so both separate MP3 exports and a full mix use the balanced copies. A mix receives its continuous noise and ending only after assembly. Originals remain available unchanged. FFmpeg is required; processing failures keep the source for retry without regenerating. Inference and volume settings are saved with tracks and sessions and restored with the other generation settings. Older sessions and API inputs without these options retain their previous behavior. This feature has been checked against a simulated engine and real FFmpeg audio; its effect on musical arrangements still needs listening tests on a real ACE-Step installation.
 
 ## Download a session as separate MP3 tracks
 

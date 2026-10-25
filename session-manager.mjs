@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createTrackSettings, needsTexture, trackPrompt } from './session-settings.mjs';
 import { hasBackground } from './public/background-noise.js';
+import { hasMastering } from './public/mastering.js';
 import { hasEnding } from './public/ending.js';
 import { sessionTrackTitle } from './public/session-names.js';
 
@@ -51,7 +52,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
         if (track.status === 'pending') return;
         if (track.status === 'failed') fail('errorSessionTrack');
         const texture = session.trackSettings?.[session.nextIndex]?.texture;
-        if (texture && (texture.grain !== 'off' || texture.events.length || hasBackground(texture.background) || hasEnding(texture.ending)) && !track.processedAudioFile) {
+        if (texture && (texture.grain !== 'off' || texture.events.length || hasBackground(texture.background) || hasEnding(texture.ending) || hasMastering(texture.mastering)) && !track.processedAudioFile) {
           await processTrack(track, texture, controller.signal);
           if (closed) return;
         }

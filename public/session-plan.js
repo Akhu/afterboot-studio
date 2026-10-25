@@ -1,7 +1,8 @@
 import { backgroundNoise } from './background-noise.js';
+import { masteringSettings } from './mastering.js';
 import { endingSettings } from './ending.js';
 
-export function sessionPlan({ minutes, mode, segmentSeconds, crossfadeSeconds = 4, tempo = {}, texture = {}, background = {}, ending = {} }) {
+export function sessionPlan({ minutes, mode, segmentSeconds, crossfadeSeconds = 4, tempo = {}, texture = {}, background = {}, ending = {}, mastering = {} }) {
   const fail = () => { throw Object.assign(new Error('errorSessionPlan'), { code: 'errorSessionPlan', status: 400 }); };
   if (!['tracks', 'mix'].includes(mode) || !Number.isInteger(minutes) || minutes < 1 || minutes > 120) fail();
   if (!Number.isInteger(segmentSeconds) || segmentSeconds < 10 || segmentSeconds > 600) fail();
@@ -22,5 +23,5 @@ export function sessionPlan({ minutes, mode, segmentSeconds, crossfadeSeconds = 
   const count = Math.max(1, Math.ceil((targetSeconds - fade) / (segmentSeconds - fade)));
   const total = targetSeconds + (count - 1) * fade;
   const durations = Array.from({ length: count }, (_, index) => Math.floor(total / count) + (index < total % count ? 1 : 0));
-  return { mode, targetSeconds, crossfadeSeconds: fade, durations, tempo: tempoRange, texture: textureSettings, background: backgroundNoise(background), ending: endingSettings(ending) };
+  return { mode, targetSeconds, crossfadeSeconds: fade, durations, tempo: tempoRange, texture: textureSettings, background: backgroundNoise(background), ending: endingSettings(ending), mastering: masteringSettings(mastering) };
 }

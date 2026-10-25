@@ -4,14 +4,16 @@ import { runFfmpeg, audioDuration } from './audio-mix.mjs';
 import { appendBackground } from './audio-background.mjs';
 import { hasBackground } from './public/background-noise.js';
 import { hasEnding, endingSeconds } from './public/ending.js';
+import { appendMastering, appendPeakGuard } from './audio-mastering.mjs';
+import { hasMastering } from './public/mastering.js';
 import { appendEnding } from './audio-ending.mjs';
 
 export async function renderTexture(track, texture, dataDir, signal) {
-  if (texture.grain === 'off' && !texture.events.length && !hasBackground(texture.background) && !hasEnding(texture.ending)) return {};
+  if (texture.grain === 'off' && !texture.events.length && !hasBackground(texture.background) && !hasEnding(texture.ending) && !hasMastering(texture.mastering)) return {};
   const source = join(dataDir, 'audio', track.audioFile);
-  const expectedSeconds = hasEnding(texture.ending) ? await audioDuration(source, signal) : track.input.duration;
+  const expectedSeconds = (hasEnding(texture.ending) || hasMastering(texture.mastering)) ? await audioDuration(source, signal) : track.input.duration;
   if (track.sessionId && Math.abs(expectedSeconds - track.input.duration) > 1) throw Object.assign(new Error('Unexpected source duration'), { code: 'errorTextureLength' });
-  const file = track.id + (hasEnding(texture.ending) ? '-finished.wav' : hasBackground(texture.background) ? '-background.wav' : '-vintage.wav');
+  const file = track.id + (hasEnding(texture.ending) ? '-finished.wav' : hasBackground(texture.background) ? '-background.wav' : hasMastering(texture.mastering) ? '-mastered.wav' : '-vintage.wav');
   const output = join(dataDir, 'audio', file);
   const temporary = output + '.tmp';
   const filters = ['[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[clean]'];
@@ -32,7 +34,9 @@ export async function renderTexture(track, texture, dataDir, signal) {
     filters.push('[body][hiss]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.97:level=0:latency=1[textured]');
     previous = 'textured';
   }
+  previous = await appendMastering(filters, previous, source, texture.mastering, signal);
   previous = appendBackground(filters, previous, texture.background, expectedSeconds, texture.noiseSeed);
+  previous = appendPeakGuard(filters, previous, texture.mastering);
   previous = appendEnding(filters, previous, texture.ending, expectedSeconds);
   const args = ['-hide_banner', '-nostdin', '-y', '-filter_complex_threads', '1', '-i', source,
     '-filter_complex', filters.join(';'), '-map', '[' + previous + ']', '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le',

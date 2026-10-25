@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.9.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.10.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -116,6 +116,20 @@ Redémarre le studio après l'installation. L'interface indique si FFmpeg est di
 La file fonctionne sur le serveur, une piste à la fois, même si le navigateur est fermé. Pause et arrêt prennent effet après la sauvegarde de la piste en cours. Une session en pause réserve la file jusqu'à sa reprise ou son arrêt. Après un redémarrage du serveur, les sessions inachevées restent en pause et doivent être reprises explicitement. Garde le studio et le moteur ouverts, et empêche la mise en veille de la machine pendant la session.
 
 Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
+
+## Régler l’inférence et le volume d’export
+
+![Réglages d’inférence et de volume](docs/screenshots/inference-fr.png)
+
+Ouvre **Inférence et volume** sous le prompt. Le bouton **Appliquer** du mode **Ambiance stable** active la planification à une température de **0,7**, top-p **0,9** et top-k **0**, ajoute des consignes d’arrangement modifiables, règle le maximum par piste à **120 secondes** et active l’harmonisation à **-18 LUFS** avec compression douce. Le prompt, la plage de BPM, les seeds, le mode de sortie, le bruit et la fin progressive gardent leurs réglages. Chaque option reste ajustable. En session longue, les durées sont réparties pour atteindre la cible sans dépasser ce maximum par piste.
+
+La température va de 0 à 2, top-p de plus de 0 à 1, et top-k de 0 à 1000 en nombres entiers. Top-p à 1 et top-k à 0 désactivent leurs filtres respectifs. Ces trois réglages agissent uniquement avec la planification et sont grisés sinon. Les consignes d’arrangement s’ajoutent indépendamment de la planification, avant la demande d’outro. Le prompt original est conservé et `generationPrompt` contient la demande complète. Vérifie les consignes contradictoires. ACE-Step peut encore densifier la batterie ; ces réglages ne garantissent pas un morceau calme. Commence par des pistes de 90 à 180 secondes et écoute-les avant de monter une longue vidéo.
+
+Turbo garde ses **8 étapes de diffusion** recommandées, avec la réécriture du prompt désactivée. Aucun curseur CFG de diffusion n’est proposé, car Turbo remplace ce paramètre. Les réglages d’échantillonnage sont pris en charge par les backends LM officiels MLX et PyTorch. Références : [documentation d’inférence ACE-Step](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/INFERENCE.md) et [paramètres de l’API REST](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/API.md).
+
+Le **Volume à l’export** agit séparément de la composition. Active l’harmonisation, choisis une cible de **-24 à -14 LUFS** et, si souhaité, la compression douce. FFmpeg applique les effets vintage puis un compresseur au ratio 2:1 s’il est coché. Une analyse puis un rendu `loudnorm` harmonisent le volume intégré de la musique, avec une cible de plage dynamique de 11 LU et un plafond de -1,5 dBTP. FFmpeg peut passer en normalisation dynamique si un gain linéaire ne respecte pas ces contraintes. Un limiteur final avec suréchantillonnage protège la somme musique et bruit à -1 dB, avant le fondu de fin. Cela réduit les écarts sans rendre chaque instant aussi fort ni changer le rythme. Un silence reste silencieux. Le bruit, les fondus et l’encodage MP3 peuvent modifier le volume mesuré à l’export final.
+
+Chaque piste est traitée avant l’assemblage, pour que les exports MP3 séparés et le mix utilisent les copies harmonisées. Le bruit continu et la fin du mix s’ajoutent après assemblage. Les originaux restent disponibles. FFmpeg est nécessaire ; un échec conserve la source pour réessayer sans régénérer. Les paramètres sont enregistrés avec les pistes et sessions et restaurés avec les autres réglages. Les anciennes sessions et requêtes API sans ces options gardent leur comportement. La fonction a été vérifiée avec un moteur simulé et de vrais traitements FFmpeg ; l’effet sur les arrangements reste à écouter sur une installation réelle d’ACE-Step.
 
 ## Télécharger une session en MP3 séparés
 
