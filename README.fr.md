@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.7.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.8.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -25,6 +25,7 @@ La version 0.7.0 est une préversion. La génération d'un morceau a été signa
 - Sessions de 30, 40 ou 60 minutes de musique, en pistes séparées ou en mix WAV avec fondus.
 - BPM tiré au hasard dans une plage pour chaque piste, avec grain et sauts façon CD facultatifs sur une copie de l'audio.
 - Fond sonore continu blanc, rose, brun ou sombre, avec un volume réglable, y compris pendant les transitions du mix.
+- Demande d'outro musicale et fin adoucie, y compris pour les morceaux déjà en bibliothèque, en conservant les originaux.
 
 Changer la langue conserve les prompts, titres et réglages. Les prompts des préréglages restent en anglais. Les messages bruts du moteur conservent leur langue d'origine.
 
@@ -102,7 +103,7 @@ Le champ de durée devient le maximum par piste. Commence avec 180 secondes pour
 
 ACE-Step accepte jusqu'à [600 secondes par génération](https://github.com/ace-step/ACE-Step-1.5#-features). Un mix de 30–40 minutes assemble donc plusieurs pistes indépendantes. Les fondus adoucissent les transitions ; ils ne garantissent ni un calage sur les temps ni une composition continue. Le plan ajoute assez d'audio source pour compenser les recouvrements des fondus.
 
-**FFmpeg est nécessaire pour le mix assemblé, le fond sonore et les effets vintage**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées sans effets, même avec des BPM aléatoires, fonctionnent sans lui. Sur macOS :
+**FFmpeg est nécessaire pour le mix assemblé, les fins progressives, le fond sonore et les effets vintage**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées sans traitement, même avec des BPM aléatoires, fonctionnent sans lui. Désactive aussi **Fin progressive** si FFmpeg est absent. Sur macOS :
 
 ~~~bash
 brew install ffmpeg
@@ -122,7 +123,17 @@ Dans l'écran de création, choisis **Fond sonore continu** : **Bruit blanc**, *
 
 Le fond est intégré au fichier audio exporté. Pour un mix long, un seul flux de bruit est ajouté après l'assemblage : il traverse tous les fondus, sans redémarrage ni baisse de volume entre les pistes. Pour un morceau seul ou une session de pistes séparées, chaque copie WAV contient son propre bruit continu. Les fichiers du moteur restent téléchargeables avec **Original**. Le type, le volume et la seed du bruit sont sauvegardés avec les paramètres de la piste ou de la session.
 
-Le fond sonore est indépendant de la probabilité des effets vintage et ajouté après les sauts CD, qui ne l'interrompent donc pas. Un limiteur protège la sortie contre l'écrêtage. Ce réglage ajoute uniquement du bruit ; les nappes musicales sans beats restent à générer séparément. Les fichiers déjà présents dans la bibliothèque ne sont pas modifiés. FFmpeg est nécessaire.
+Le fond sonore est indépendant de la probabilité des effets vintage et ajouté après les sauts CD, qui ne l'interrompent donc pas. Un limiteur protège la sortie contre l'écrêtage. Quand **Fin progressive** est activée, le bruit suit le fondu final au silence. Ce réglage ajoute uniquement du bruit ; les nappes musicales sans beats restent à générer séparément. Les fichiers déjà présents dans la bibliothèque ne sont pas modifiés automatiquement. FFmpeg est nécessaire.
+
+## Adoucir la fin des morceaux
+
+![Réglage de fin progressive](docs/screenshots/ending-fr.png)
+
+**Fin progressive** est activée à **6 secondes** par défaut dans l'écran de création. Choisis 3, 6 ou 10 secondes, ou **Désactivé**. Pour les nouveaux morceaux, Afterboot ajoute une demande d'outro au prompt envoyé à ACE-Step, puis applique un fondu doux à la fin du WAV exporté, fond sonore compris. Ton prompt reste intact ; les métadonnées conservent le texte exact envoyé dans `generationPrompt`. ACE-Step peut ignorer la demande d'outro : une conclusion musicale résolue n'est donc pas garantie. Le fondu final évite l'arrêt net à la fin du fichier.
+
+Dans une session de morceaux séparés, chaque piste reçoit sa propre fin. Dans un mix long, seule la dernière piste reçoit la demande d'outro, et le fondu est appliqué à la fin du mix assemblé. Les transitions internes gardent leurs fondus sans ajouter de silence entre les morceaux. Le traitement mesure la durée réelle de l'audio et la conserve ; sur un extrait court, le fondu est limité à la moitié de cette durée. Les durées de fondu demandée et appliquée sont sauvegardées dans les métadonnées. FFmpeg est nécessaire.
+
+Pour un morceau déjà dans la bibliothèque, clique sur **Adoucir la fin · 6 s**. Une copie WAV est créée à partir de l'audio actuel, en conservant son bruit de fond et ses éventuels effets vintage. L'original du moteur reste téléchargeable. Cette action ne contacte pas ACE-Step et ne relance aucune génération. Les fichiers de mix déjà assemblés ne sont pas reconstruits. Les anciennes sessions sauvegardées et les clients API sans réglage de fin gardent leur comportement précédent.
 
 ## Varier les tempos et ajouter une texture vintage
 
@@ -134,7 +145,7 @@ Dans **Texture vintage**, choisis **Grain léger** ou **Cassette usée**, et act
 
 La probabilité s'applique indépendamment à chaque effet activé, pour chaque piste. À 35 %, certaines pistes reçoivent un effet et d'autres restent propres ; ce n'est pas un quota exact. Les deux effets sont désactivés par défaut. Les réglages, seeds du souffle et positions des sauts sont conservés dans les métadonnées. Le plan des pistes affiche les tempos et effets choisis avant la génération.
 
-Les copies traitées sont des WAV stéréo, même si l'original est en MP3 ou FLAC. L'écoute et l'assemblage utilisent la copie traitée. Le bouton **Original** télécharge la sortie intacte du moteur. Si le traitement échoue, la session se met en pause et garde l'original. Reprendre réessaie les réglages sauvegardés sans envoyer une nouvelle génération. Les anciennes sessions et la génération d'un seul morceau conservent leur fonctionnement.
+Les copies traitées sont des WAV stéréo, même si l'original est en MP3 ou FLAC. L'écoute et l'assemblage utilisent la copie traitée. Le bouton **Original** télécharge la sortie intacte du moteur. Si le traitement échoue, la session se met en pause et garde l'original. Reprendre réessaie les réglages sauvegardés sans envoyer une nouvelle génération. Les sessions sauvegardées sans les nouveaux réglages de traitement conservent leur fonctionnement.
 
 ## Configuration
 
@@ -162,7 +173,7 @@ Cette préversion couvre la création d'instrumentaux à partir de texte et l'as
 npm test
 ~~~
 
-Les tests couvrent la validation, l'envoi et le suivi des tâches, la copie et la lecture partielle de l'audio, les seeds renvoyées, la persistance, les erreurs du moteur, les contrôles réseau, les files de session, la pause et la reprise après redémarrage, ainsi que le calcul des durées. Avec FFmpeg installé, ils assemblent aussi des sons de test et vérifient les fondus et la durée finale. Ils ne téléchargent aucun modèle et ne génèrent pas de musique.
+Les tests couvrent la validation, l'envoi et le suivi des tâches, la copie et la lecture partielle de l'audio, les seeds renvoyées, la persistance, les erreurs du moteur, les contrôles réseau, les files de session, la pause et la reprise après redémarrage, ainsi que le calcul des durées. Avec FFmpeg installé, ils assemblent aussi des sons de test et vérifient les fondus, le bruit continu, la durée finale et les fins qui atteignent le silence. Ils ne téléchargent aucun modèle et ne génèrent pas de musique.
 
 L'application utilise HTML, CSS et JavaScript côté navigateur avec un serveur Node.js. Les requêtes suivent ce chemin :
 

@@ -1,13 +1,15 @@
 import { randomInt } from 'node:crypto';
 import { hasBackground } from './public/background-noise.js';
+import { hasEnding } from './public/ending.js';
 
 export function needsTexture(plan) {
-  return hasBackground(plan.background) || Boolean(plan.texture?.chance > 0 && (plan.texture.grain !== 'off' || plan.texture.cdSkips));
+  return hasEnding(plan.ending) || hasBackground(plan.background) || Boolean(plan.texture?.chance > 0 && (plan.texture.grain !== 'off' || plan.texture.cdSkips));
 }
 export function createTrackSettings(input, plan, draw = randomInt) {
   return plan.durations.map(duration => {
     const bpm = plan.tempo?.enabled ? draw(plan.tempo.min, plan.tempo.max + 1) : input.bpm;
     const texture = { grain: 'off', noiseSeed: 1, events: [] };
+    if (plan.mode === 'tracks' && hasEnding(plan.ending)) texture.ending = { ...plan.ending };
     if (plan.mode === 'tracks' && hasBackground(plan.background)) {
       texture.background = { ...plan.background };
       texture.noiseSeed = draw(1, 2147483647);

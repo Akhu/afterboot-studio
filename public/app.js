@@ -1,6 +1,7 @@
 import { translate, preferredLanguage } from '/i18n.js';
 import { sessionPlan } from '/session-plan.js';
 import { hasBackground } from '/background-noise.js';
+import { hasEnding } from '/ending.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -80,11 +81,12 @@ function formValues() {
     tempo: { enabled: $('vary-bpm').checked, min: Number($('bpm-min').value), max: Number($('bpm-max').value) },
     texture: { grain: $('grain').value, cdSkips: $('cd-skips').checked, chance: Number($('texture-chance').value) },
     background: { type: $('background-type').value, levelDb: Number($('background-volume').value) },
+    ending: { seconds: Number($('ending-seconds').value) },
   };
 }
 function sessionOptions(values = formValues()) {
   return { mode: values.generationMode, minutes: values.sessionMinutes, segmentSeconds: values.duration,
-    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture, background: values.background };
+    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture, background: values.background, ending: values.ending };
 }
 function updateForm() {
   $('prompt-count').textContent = t('characters', { count: $('prompt').value.length });
@@ -108,7 +110,8 @@ function updateForm() {
   $('background-volume-display').textContent = values.background.levelDb + ' dB';
   $('background-volume').setAttribute('aria-valuetext', values.background.levelDb + ' dB');
   const effectsEnabled = values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips);
-  $('mix-requirement').hidden = !hasBackground(values.background) && (mode === 'single' || (mode !== 'mix' && !effectsEnabled));
+  $('mix-requirement').hidden = !hasEnding(values.ending) && !hasBackground(values.background) && (mode === 'single' || (mode !== 'mix' && !effectsEnabled));
+  $('ending-hint').textContent = t(mode === 'mix' ? 'endingMixHint' : 'endingHint');
   $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
   if (mode !== 'single') {
     try {
@@ -143,13 +146,20 @@ function setForm(input) {
   $('texture-chance').value = input.texture?.chance ?? 35;
   $('background-type').value = input.background?.type || 'off';
   $('background-volume').value = input.background?.levelDb ?? -32;
+  const seconds = input.ending?.seconds ?? 6;
+  $('ending-seconds').querySelectorAll('[data-custom-ending]').forEach(option => option.remove());
+  if (![0, 3, 6, 10].includes(seconds)) {
+    const option = node('option', '', seconds + ' s'); option.value = seconds; option.dataset.customEnding = '';
+    $('ending-seconds').append(option);
+  }
+  $('ending-seconds').value = seconds;
   updateForm();
 }
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
 function restore(track, variation) {
   const returnedSeed = Number(seedOf(track).split(',')[0]);
   setForm({
-    ...track.input, background: track.texture?.background || track.input.background, title: track.input.title + (variation ? t('variationSuffix') : ''),
+    ...track.input, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: track.input.title + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
   });
@@ -169,6 +179,7 @@ function textureDescription(texture) {
   if (texture?.grain && texture.grain !== 'off') parts.push(t(texture.grain === 'worn' ? 'grainWorn' : 'grainLight'));
   if (texture?.events?.length) parts.push(t('cdSkips'));
   if (hasBackground(texture?.background)) parts.push(backgroundDescription(texture.background));
+  if (hasEnding(texture?.ending)) parts.push(t('endingSummary', { seconds: texture.ending.seconds }));
   return parts.join(' · ');
 }
 function backgroundDescription(background) {
@@ -221,6 +232,18 @@ function audioCard(track) {
       const original = node('a', '', t('downloadOriginal', { format: track.input.format.toUpperCase() }));
       original.href = downloadURL(track.originalAudioURL); original.download = ''; buttons.append(original);
     }
+    if (!hasEnding(track.texture?.ending)) {
+      const finish = action(t('finishExisting'), async () => {
+        finish.disabled = true; finish.textContent = t('finishing');
+        try {
+          const updated = await api('/api/tracks/' + track.id + '/finish', { seconds: 6 });
+          tracks = tracks.map(item => item.id === track.id ? updated : item);
+          render(); toast(t('endingReady'));
+        } catch (error) { toast(errorMessage(error), true); }
+        finally { finish.disabled = false; finish.textContent = t('finishExisting'); }
+      });
+      buttons.append(finish);
+    }
   }
   buttons.append(action(t('reuse'), () => restore(track, false)), action(t('newVariation'), () => restore(track, true)));
   const metadata = node('a', '', t('downloadSettings'));
@@ -270,6 +293,7 @@ function renderSessions() {
     const card = node('article', 'session-card');
     card.append(node('h3', '', session.input.title));
     if (hasBackground(session.plan.background)) card.append(node('p', 'field-note', backgroundDescription(session.plan.background)));
+    if (hasEnding(session.plan.ending)) card.append(node('p', 'field-note', t('endingSummary', { seconds: session.plan.ending.seconds })));
     card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 })));
     const progress = node('progress');
     progress.max = session.plan.durations.length; progress.value = session.completedCount;
@@ -332,7 +356,7 @@ function updateActivity() {
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
   const values = formValues();
-  const needsFfmpeg = hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
+  const needsFfmpeg = hasEnding(values.ending) || hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
   let invalidPlan = false;
   if (values.generationMode !== 'single') {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }

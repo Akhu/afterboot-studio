@@ -2,6 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { appendBackground } from './audio-background.mjs';
+import { appendEnding } from './audio-ending.mjs';
+import { hasEnding, endingSeconds } from './public/ending.js';
 
 const executable = () => process.env.FFMPEG_PATH || 'ffmpeg';
 export function ffmpegAvailable() {
@@ -21,15 +23,25 @@ export function runFfmpeg(args, signal, errorCode = 'errorSessionMix') {
     });
   });
 }
+export async function audioDuration(path, signal, errorCode = 'errorTextureRender') {
+  const duration = await runFfmpeg(['-hide_banner', '-nostdin', '-i', path, '-map', '0:a:0', '-vn', '-progress', 'pipe:1', '-f', 'null', '-'], signal, errorCode);
+  if (!Number.isFinite(duration) || duration <= 0) throw Object.assign(new Error('Invalid audio duration'), { code: errorCode });
+  return duration;
+}
 export async function assembleMix(session, tracks, dataDir, signal) {
   const output = join(dataDir, 'audio', session.id + '-mix.wav');
   const temporary = output + '.tmp';
   const args = ['-hide_banner', '-nostdin', '-y', '-filter_complex_threads', '1'];
   const filters = [];
-  tracks.forEach((track, index) => {
-    args.push('-i', join(dataDir, 'audio', track.processedAudioFile || track.audioFile));
+  let measuredSeconds = 0;
+  for (const [index, track] of tracks.entries()) {
+    const source = join(dataDir, 'audio', track.processedAudioFile || track.audioFile);
+    args.push('-i', source);
+    if (hasEnding(session.plan.ending)) measuredSeconds += Math.min(session.plan.durations[index], await audioDuration(source, signal, 'errorSessionMix'));
     filters.push('[' + index + ':a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=duration=' + session.plan.durations[index] + ',asetpts=PTS-STARTPTS[a' + index + ']');
-  });
+  }
+  const finalSeconds = hasEnding(session.plan.ending) ? measuredSeconds - (tracks.length - 1) * session.plan.crossfadeSeconds : session.plan.targetSeconds;
+  if (Math.abs(finalSeconds - session.plan.targetSeconds) > 1) throw Object.assign(new Error('Unexpected source duration'), { code: 'errorSessionLength', params: { seconds: Math.round(finalSeconds), target: session.plan.targetSeconds } });
   let previous = 'a0';
   for (let index = 1; index < tracks.length; index++) {
     const next = 'x' + index;
@@ -39,6 +51,7 @@ export async function assembleMix(session, tracks, dataDir, signal) {
     previous = next;
   }
   previous = appendBackground(filters, previous, session.plan.background, session.plan.targetSeconds, session.input?.seed ?? 1);
+  previous = appendEnding(filters, previous, session.plan.ending, finalSeconds);
   args.push('-filter_complex', filters.join(';'), '-map', '[' + previous + ']', '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le', '-progress', 'pipe:1', '-f', 'wav', temporary);
   try {
     const duration = await runFfmpeg(args, signal);
@@ -46,6 +59,6 @@ export async function assembleMix(session, tracks, dataDir, signal) {
       throw Object.assign(new Error('Unexpected mixed duration'), { code: 'errorSessionLength', params: { seconds: Math.round(duration), target: session.plan.targetSeconds } });
     }
     renameSync(temporary, output);
-    return { audioFile: session.id + '-mix.wav', duration };
+    return { audioFile: session.id + '-mix.wav', duration, endingAppliedSeconds: hasEnding(session.plan.ending) ? endingSeconds(session.plan.ending, finalSeconds) : undefined };
   } finally { rmSync(temporary, { force: true }); }
 }

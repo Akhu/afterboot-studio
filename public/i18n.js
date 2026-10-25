@@ -1,5 +1,18 @@
 // UI text only. User prompts, track titles and model output are never translated.
 export const strings = {
+  endingLabel: ["Fin progressive", "Gentle ending"],
+  ending3: ["3 secondes", "3 seconds"],
+  ending6: ["6 secondes · conseillé", "6 seconds · recommended"],
+  ending10: ["10 secondes", "10 seconds"],
+  endingHint: ["Demande une outro à ACE-Step, puis termine l'audio et son fond sonore par un fondu doux. La durée du fichier est conservée. FFmpeg est nécessaire.", "Ask ACE-Step for an outro, then fade the audio and its background smoothly to silence. File duration is preserved. Requires FFmpeg."],
+  endingMixHint: ["Demande une outro à la dernière piste et adoucit la fin du mix complet, fond sonore inclus. Les transitions entre les pistes conservent leurs fondus. FFmpeg est nécessaire.", "Ask the final track for an outro and fade the full mix to silence, background included. Internal transitions keep their crossfades. Requires FFmpeg."],
+  endingSummary: ["Fin progressive · {seconds} s", "Gentle ending · {seconds} s"],
+  finishExisting: ["Adoucir la fin · 6 s", "Soften ending · 6 s"],
+  finishing: ["Traitement de la fin…", "Softening ending…"],
+  endingReady: ["Fin adoucie. L'original est conservé.", "Ending softened. The original is saved."],
+  errorEndingOptions: ["Choisis une durée de fin progressive entre 0 et 15 secondes.", "Choose a gentle ending duration between 0 and 15 seconds."],
+  errorEndingReady: ["Le morceau doit être terminé avant de pouvoir adoucir sa fin.", "The track must be ready before its ending can be softened."],
+  errorEndingRender: ["Le traitement de la fin a échoué. L'audio précédent est conservé. Vérifie FFmpeg, puis réessaie sans régénérer la musique.", "Ending processing failed. The previous audio is saved. Check FFmpeg and retry without generating the music again."],
   backgroundLabel: ["Fond sonore continu", "Continuous background noise"],
   backgroundVolume: ["Volume du fond sonore", "Background volume"],
   noiseWhite: ["Bruit blanc", "White noise"],

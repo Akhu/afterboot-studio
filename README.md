@@ -10,7 +10,7 @@ Independent community UI. ACE-Step runs separately and provides all music genera
 
 ## Preview status
 
-Version 0.7.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.8.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -25,6 +25,7 @@ Version 0.7.0 is an early preview. Single-track generation has been reported wor
 - Queue 30, 40 or 60 minutes of music, as separate tracks or one WAV mix with crossfades.
 - Randomize each track's requested BPM within a range, and optionally add grain and occasional CD-style skips to a separate audio copy.
 - Add continuous white, pink, brown or dark background noise with adjustable volume, including across mix transitions.
+- Request musical outros and soften endings, including on existing library tracks, while keeping originals.
 
 Switching UI languages preserves prompts, titles and settings. Preset prompts stay in English. Raw engine messages retain their original language.
 
@@ -102,7 +103,7 @@ The duration field is the maximum length of an individual track. Start with 180 
 
 ACE-Step supports up to [600 seconds per generation](https://github.com/ace-step/ACE-Step-1.5#-features). A 30–40 minute mix is assembled from independently generated tracks. Crossfades soften the transitions; they do not provide beat matching or guarantee continuous composition. The planner adds enough source audio to compensate for overlapping fades.
 
-**FFmpeg is required for assembled mixes, background noise and vintage effects**, on the computer running the Node studio. Separate-track sessions without effects, including random BPM, work without it. On macOS:
+**FFmpeg is required for assembled mixes, gentle endings, background noise and vintage effects**, on the computer running the Node studio. Separate-track sessions without processing, including random BPM, work without it. Disable **Gentle ending** as well if FFmpeg is unavailable. On macOS:
 
 ~~~bash
 brew install ffmpeg
@@ -122,7 +123,17 @@ Choose **Continuous background noise** in the creation screen: **White noise**, 
 
 The background is rendered into the audio export. For a long mix, one seeded stream is added after assembly and continues across every crossfade, without resets or volume dips at track boundaries. For a single track or separate-track session, each processed WAV contains its own continuous noise stream. Original engine files remain available through **Original**. The noise type, gain and seed are saved with the track or session settings.
 
-Background noise is independent of vintage-effect probability and is added after CD skips, so those effects do not interrupt it. A limiter protects the output from clipping. This adds a noise bed only; beatless musical pads still need to be generated separately. Existing library files are not changed. Requires FFmpeg.
+Background noise is independent of vintage-effect probability and is added after CD skips, so those effects do not interrupt it. A limiter protects the output from clipping. When **Gentle ending** is enabled, the noise follows the final fade to silence. This adds a noise bed only; beatless musical pads still need to be generated separately. Existing library files are not changed automatically. Requires FFmpeg.
+
+## Soften track endings
+
+![Gentle ending controls](docs/screenshots/ending-en.png)
+
+**Gentle ending** is enabled at **6 seconds** by default in the creation screen. Choose 3, 6 or 10 seconds, or **Off**. For new tracks, Afterboot appends an outro request to the prompt sent to ACE-Step and applies a smooth final fade to the exported WAV, including any background noise. Your prompt remains unchanged; metadata includes the exact sent prompt as `generationPrompt`. ACE-Step can still ignore an outro request, so a resolved musical ending is not guaranteed. The final fade prevents a hard stop at the file boundary.
+
+For separate-track sessions, every track receives its own ending. For long mixes, only the final track receives an outro request, and the fade is applied at the end of the assembled mix. Internal transitions retain their crossfades without adding silence between tracks. Finishing measures the actual source duration and preserves it; on short excerpts, the fade is limited to half the audio duration. Requested and applied fade lengths are saved in metadata. FFmpeg is required.
+
+For an existing library track, click **Soften ending · 6 s**. This creates a finished WAV from the current audio, preserving any existing noise or vintage effects and keeping the engine original downloadable. It does not contact ACE-Step or consume another generation. Existing assembled mix files are not rebuilt. Previously saved sessions and older API clients without ending settings keep their previous behavior.
 
 ## Vary tempos and add vintage texture
 
@@ -134,7 +145,7 @@ Under **Vintage texture**, choose **Light grain** or **Worn cassette**, and opti
 
 The probability control applies independently to each enabled effect on each track. At 35%, some tracks receive an effect and others remain clean; this is a probability, not an exact quota. Both effects are off by default. Settings, noise seeds and skip positions are recorded in session metadata. The track plan shows the selected tempos and effects before generation.
 
-Processed copies are stereo WAV files, also when the original was MP3 or FLAC. Playback and mix assembly use the processed copy. **Original** downloads the untouched engine output. If processing fails, the session pauses and retains the original. Resume retries the saved processing settings without submitting another generation. Existing sessions and single-track generation keep their previous behavior.
+Processed copies are stereo WAV files, also when the original was MP3 or FLAC. Playback and mix assembly use the processed copy. **Original** downloads the untouched engine output. If processing fails, the session pauses and retains the original. Resume retries the saved processing settings without submitting another generation. Saved sessions without the new processing settings keep their previous behavior.
 
 ## Configuration
 
@@ -162,7 +173,7 @@ This preview supports instrumental text-to-music and session assembly. Remix, re
 npm test
 ~~~
 
-Tests cover input validation, submission and polling, audio archiving and range playback, returned seeds, persistence, engine failures, LAN host/origin checks, session queues, pause/restart recovery and duration planning. When FFmpeg is installed, tests also assemble synthetic audio and verify crossfades and final duration. They do not download models or generate music.
+Tests cover input validation, submission and polling, audio archiving and range playback, returned seeds, persistence, engine failures, LAN host/origin checks, session queues, pause/restart recovery and duration planning. When FFmpeg is installed, tests also assemble synthetic audio and verify crossfades, continuous noise, final duration and endings that reach silence. They do not download models or generate music.
 
 The app uses HTML, CSS and browser JavaScript with a Node.js server. Requests follow this path:
 

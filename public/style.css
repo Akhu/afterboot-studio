@@ -339,6 +339,11 @@ dialog .primary { width: 100%; margin-top: 18px; }
 .bpm-range input { display: block; width: 100%; margin-top: 6px; font: 14px var(--mono); }
 .texture-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: center; }
 .background-options { grid-column: 1 / -1; border-top: 1px solid #b7b8a8; padding-top: 14px; margin-top: 4px; }
+.ending-options { grid-column: 1 / -1; border-top: 1px solid #b7b8a8; padding-top: 14px; }
+.ending-control { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: center; }
+.ending-control label { font-weight: bold; color: #1c3855; }
+.ending-control select { margin: 0; }
+@media (max-width: 620px) { .ending-control { grid-template-columns: 1fr; gap: 8px; } }
 #mix-requirement { grid-column: 1 / -1; }
 .background-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; }
 .background-controls label { display: block; }
