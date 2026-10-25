@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.4.0 est une première préversion. L'interface a été vérifiée dans un navigateur et l'intégration API dispose de tests automatisés avec un serveur ACE-Step simulé. La génération complète avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.5.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -22,6 +22,7 @@ La version 0.4.0 est une première préversion. L'interface a été vérifiée d
 - Écoute, recherche, favoris et reprise des paramètres d'un morceau.
 - Téléchargement WAV, FLAC ou MP3 et métadonnées de génération en JSON.
 - Accès depuis un autre ordinateur du réseau privé.
+- Sessions de 30, 40 ou 60 minutes de musique, en pistes séparées ou en mix WAV avec fondus.
 
 Changer la langue conserve les prompts, titres et réglages. Les prompts des préréglages restent en anglais. Les messages bruts du moteur conservent leur langue d'origine.
 
@@ -89,6 +90,28 @@ ACESTEP_API_URL=http://<ip-machine-moteur>:8001 npm run start:lan
 
 Ces affectations de variables utilisent la syntaxe macOS/Linux. Dans PowerShell, définis `$env:ACESTEP_API_URL = "http://<ip-machine-moteur>:8001"` avant de lancer npm.
 
+## Générer 30–40 minutes de musique
+
+![Préparer un mix de 40 minutes](docs/screenshots/session-fr.jpg)
+
+Dans l'écran de création, choisis **Plusieurs morceaux** ou **Un mix long avec fondus**, puis une durée totale de 30 ou 40 minutes. Cette cible correspond à la durée de l'audio, pas au temps pendant lequel le Mac travaille. Utilise le prompt, le tempo et la planification musicale pour choisir la direction musicale.
+
+Le champ de durée devient le maximum par piste. Commence avec 180 secondes pour les morceaux séparés ou 300 secondes pour un mix. Le plan équilibre les durées et affiche le nombre de pistes avant le lancement. Chaque piste reçoit une seed différente, dérivée de la seed de départ sauvegardée. Par exemple, 30 minutes de morceaux séparés avec une durée de 180 secondes donnent dix pistes.
+
+ACE-Step accepte jusqu'à [600 secondes par génération](https://github.com/ace-step/ACE-Step-1.5#-features). Un mix de 30–40 minutes assemble donc plusieurs pistes indépendantes. Les fondus adoucissent les transitions ; ils ne garantissent ni un calage sur les temps ni une composition continue. Le plan ajoute assez d'audio source pour compenser les recouvrements des fondus.
+
+**FFmpeg est nécessaire uniquement pour le mix assemblé**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées fonctionnent sans lui. Sur macOS :
+
+~~~bash
+brew install ffmpeg
+~~~
+
+Redémarre le studio après l'installation. L'interface indique si FFmpeg est disponible. Sur les autres systèmes, installe FFmpeg dans le PATH, ou définis FFMPEG_PATH avec le chemin complet de son exécutable. Les mixes finaux sont des WAV PCM stéréo à 44,1 kHz. Les pistes originales conservent le format choisi et restent téléchargeables séparément. Un WAV de 40 minutes pèse environ 424 Mo, en plus des pistes originales.
+
+La file fonctionne sur le serveur, une piste à la fois, même si le navigateur est fermé. Pause et arrêt prennent effet après la sauvegarde de la piste en cours. Une session en pause réserve la file jusqu'à sa reprise ou son arrêt. Après un redémarrage du serveur, les sessions inachevées restent en pause et doivent être reprises explicitement. Garde le studio et le moteur ouverts, et empêche la mise en veille de la machine pendant la session.
+
+Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
+
 ## Configuration
 
 | Variable | Valeur par défaut | Rôle |
@@ -97,6 +120,7 @@ Ces affectations de variables utilisent la syntaxe macOS/Linux. Dans PowerShell,
 | `ACESTEP_API_KEY` | Vide | Clé facultative du moteur, transmise uniquement par le serveur Node |
 | `PORT` | `3210` | Port du studio |
 | `HOST` | `127.0.0.1` | `0.0.0.0` pour le réseau, ou utilise `npm run start:lan` |
+| `FFMPEG_PATH` | `ffmpeg` dans le PATH | Chemin facultatif de l'exécutable pour assembler les mixes longs |
 
 Définis les variables dans le terminal de lancement. Le studio ne charge pas automatiquement de fichier .env. Pour activer une clé API côté moteur, consulte la [documentation officielle d'authentification](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/API.md#1-authentication).
 
@@ -106,7 +130,7 @@ Le dossier `.data/`, à côté du serveur, contient l'audio et les métadonnées
 
 Le studio copie les morceaux terminés depuis ACE-Step vers sa bibliothèque. Les anciens résultats Gradio ne sont pas importés automatiquement. Un suivi mis en pause n'annule pas la génération sur le moteur. Utilise « Vérifier l'état » pour le reprendre. Avant leur copie, les résultats restent soumis à la politique de cache du moteur.
 
-Cette préversion couvre uniquement la création d'instrumentaux à partir de texte. Remix, repaint, entraînement LoRA et assemblage de mixes d'une heure ne sont pas inclus. Le backend LM est MLX sur macOS et PyTorch ailleurs.
+Cette préversion couvre la création d'instrumentaux à partir de texte et l'assemblage de sessions. Remix, repaint et entraînement LoRA ne sont pas inclus. Le backend LM est MLX sur macOS et PyTorch ailleurs.
 
 ## Développement
 
@@ -114,7 +138,7 @@ Cette préversion couvre uniquement la création d'instrumentaux à partir de te
 npm test
 ~~~
 
-Les tests couvrent la validation, l'envoi et le suivi des tâches, la copie et la lecture partielle de l'audio, les seeds renvoyées, la persistance, les erreurs du moteur et les contrôles d'hôte et d'origine en mode réseau. Ils ne téléchargent aucun modèle et ne génèrent pas de musique.
+Les tests couvrent la validation, l'envoi et le suivi des tâches, la copie et la lecture partielle de l'audio, les seeds renvoyées, la persistance, les erreurs du moteur, les contrôles réseau, les files de session, la pause et la reprise après redémarrage, ainsi que le calcul des durées. Avec FFmpeg installé, ils assemblent aussi des sons de test et vérifient les fondus et la durée finale. Ils ne téléchargent aucun modèle et ne génèrent pas de musique.
 
 L'application utilise HTML, CSS et JavaScript côté navigateur avec un serveur Node.js. Les requêtes suivent ce chemin :
 

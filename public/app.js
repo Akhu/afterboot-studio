@@ -1,4 +1,5 @@
 import { translate, preferredLanguage } from '/i18n.js';
+import { sessionPlan } from '/session-plan.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -20,6 +21,7 @@ const presets = {
   ambient: { bpm: 110, prompt: 'Instrumental ambient techno from the late 1990s, 110 BPM. Soft rhythmic pulses, warm digital pads, gently evolving arpeggios, deep rounded bass. A quiet computer room at dawn, reflective and spacious. Subtle development, clean textures, gradual atmospheric ending. No vocals, no spoken words, no piano.' },
 };
 let tracks = [], online = false, connectionChecked = false, submitting = false, favoritesOnly = false, toastTimer;
+let sessions = [], canMix = false, sessionRefresh = false;
 const polling = new Map();
 
 function node(tag, className, text) {
@@ -73,16 +75,32 @@ function formValues() {
     bpm: Number($('bpm').value), duration: Number($('duration').value),
     randomSeed: $('random-seed').checked, seed: Number($('seed').value),
     thinking: $('thinking').checked, format: $('format').value,
+    generationMode: $('generation-mode').value, sessionMinutes: Number($('session-minutes').value), crossfadeSeconds: Number($('crossfade').value),
   };
 }
 function updateForm() {
   $('prompt-count').textContent = t('characters', { count: $('prompt').value.length });
   $('seed').disabled = $('random-seed').checked;
   const duration = Number($('duration').value);
+  const mode = $('generation-mode').value;
+  document.querySelector('[data-i18n="duration"]').textContent = t(mode === 'single' ? 'duration' : 'perTrackDuration');
+  document.querySelector('[data-i18n="randomSeed"]').textContent = t(mode === 'single' ? 'randomSeed' : 'randomSessionSeed');
+  document.querySelector('[data-i18n="seedHint"]').textContent = t(mode === 'single' ? 'seedHint' : 'sessionSeedHint');
+  $('session-options').hidden = mode === 'single';
+  $('crossfade-option').hidden = mode !== 'mix';
+  $('mix-requirement').hidden = mode !== 'mix';
+  $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
+  if (mode !== 'single') {
+    try {
+      const plan = sessionPlan({ minutes: Number($('session-minutes').value), mode, segmentSeconds: duration, crossfadeSeconds: Number($('crossfade').value) });
+      $('session-preview').textContent = t('sessionPreview', { count: plan.durations.length, minutes: plan.targetSeconds / 60, min: Math.min(...plan.durations), max: Math.max(...plan.durations) });
+    } catch { $('session-preview').textContent = t('errorSessionPlan'); }
+  }
   $('duration-display').textContent = Math.floor(duration / 60) + ' min ' + String(duration % 60).padStart(2, '0');
   document.querySelectorAll('[data-duration]').forEach(button => button.classList.toggle('selected', Number(button.dataset.duration) === duration));
   document.querySelectorAll('[data-preset]').forEach(button => button.classList.toggle('active', $('prompt').value === presets[button.dataset.preset].prompt));
   try { localStorage.setItem('afterboot-draft-v1', JSON.stringify(formValues())); } catch {}
+  updateActivity();
 }
 function setForm(input) {
   $('track-title').value = input.title || '';
@@ -93,6 +111,9 @@ function setForm(input) {
   $('random-seed').checked = input.randomSeed ?? true;
   $('thinking').checked = input.thinking ?? true;
   $('format').value = input.format || 'wav';
+  $('generation-mode').value = input.generationMode || 'single';
+  $('session-minutes').value = input.sessionMinutes || 30;
+  $('crossfade').value = input.crossfadeSeconds ?? 4;
   updateForm();
 }
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
@@ -194,15 +215,73 @@ function render() {
   renderLibrary();
   updateActivity();
 }
+function sessionIsOpen(session) { return !['complete', 'stopped'].includes(session.status); }
+function renderSessions() {
+  $('sessions-section').hidden = !sessions.length;
+  const list = $('session-list');
+  list.replaceChildren();
+  for (const session of sessions) {
+    const card = node('article', 'session-card');
+    card.append(node('h3', '', session.input.title));
+    card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 })));
+    const progress = node('progress');
+    progress.max = session.plan.durations.length; progress.value = session.completedCount;
+    progress.setAttribute('aria-label', t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 }));
+    card.append(progress);
+    if (session.errorCode) card.append(node('p', 'track-error', t(session.errorCode, session.errorParams)));
+    if (['running', 'pausing', 'stopping'].includes(session.status)) card.append(node('p', 'field-note', t('sessionFinishesTrack')));
+    const buttons = node('div', 'track-actions');
+    const control = async actionName => {
+      try { await api('/api/sessions/' + session.id + '/' + actionName, {}); await refreshSessions(); }
+      catch (error) { toast(errorMessage(error), true); }
+    };
+    if (session.status === 'running') buttons.append(action(t('sessionPause'), () => control('pause')));
+    if (session.status === 'paused' && !session.submissionUnknown) buttons.append(action(t('sessionResume'), () => control('resume')));
+    if (sessionIsOpen(session) && session.status !== 'assembling') buttons.append(action(t('sessionStop'), () => control('stop')));
+    if (session.audioURL) {
+      const download = node('a', 'download', t('downloadMix')); download.href = session.audioURL; download.download = ''; buttons.append(download);
+    }
+    const metadata = node('a', '', t('downloadSessionSettings')); metadata.href = '/api/sessions/' + session.id + '/metadata'; metadata.download = ''; buttons.append(metadata);
+    card.append(buttons);
+    const ready = session.trackIds.map(id => tracks.find(track => track.id === id)).filter(track => track?.status === 'ready');
+    if (ready.length) {
+      const files = node('details', 'session-files'); files.append(node('summary', '', t(ready.length === 1 ? 'sessionFile' : 'sessionFiles', { count: ready.length })));
+      for (const track of ready) {
+        const link = node('a', '', '↓ ' + track.input.title); link.href = track.audioURL + '?download'; link.download = ''; files.append(link);
+      }
+      card.append(files);
+    }
+    list.append(card);
+  }
+  updateActivity();
+}
+async function refreshSessions() {
+  if (sessionRefresh) return;
+  sessionRefresh = true;
+  try {
+    const data = await api('/api/sessions');
+    const changed = JSON.stringify(data.sessions) !== JSON.stringify(sessions);
+    canMix = data.canMix;
+    if (changed) {
+      const updatedTracks = await api('/api/tracks');
+      sessions = data.sessions;
+      tracks = updatedTracks;
+      render(); renderSessions();
+    }
+    $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
+    updateActivity();
+  } finally { sessionRefresh = false; }
+}
 function updateActivity() {
   const pending = tracks.find(track => polling.has(track.id));
   const busy = submitting || Boolean(pending);
-  $('generate').disabled = busy;
-  if (busy) $('generate').textContent = t(submitting ? 'sending' : 'generating');
+  const openSession = sessions.some(sessionIsOpen);
+  $('generate').disabled = busy || openSession || ($('generation-mode').value === 'mix' && !canMix);
+  if (busy || openSession) $('generate').textContent = t(openSession ? 'sessionInProgress' : submitting ? 'sending' : 'generating');
   else {
     const icon = node('span', '', '▶');
     icon.setAttribute('aria-hidden', 'true');
-    $('generate').replaceChildren(icon, document.createTextNode(' ' + t('generate')));
+    $('generate').replaceChildren(icon, document.createTextNode(' ' + t($('generation-mode').value === 'single' ? 'generate' : 'startSession')));
   }
   $('activity').hidden = !busy;
   if (pending) {
@@ -258,12 +337,18 @@ $('generation-form').addEventListener('input', updateForm);
 $('generation-form').addEventListener('change', updateForm);
 $('generation-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (submitting || polling.size) return;
+  if (submitting || polling.size || sessions.some(sessionIsOpen)) return;
   submitting = true; updateActivity();
   try {
     if (!online && !await health()) { $('connection-dialog').showModal(); return; }
     const input = formValues();
     input.title = input.title.trim() || t('untitled');
+    if (input.generationMode !== 'single') {
+      const session = await api('/api/sessions', { input, mode: input.generationMode, minutes: input.sessionMinutes, segmentSeconds: input.duration, crossfadeSeconds: input.crossfadeSeconds });
+      sessions.unshift(session); renderSessions();
+      $('sessions-section').scrollIntoView({ block: 'nearest' });
+      return;
+    }
     const track = await api('/api/generate', input);
     tracks.unshift(track); render();
     startPolling(track.id);
@@ -280,6 +365,10 @@ $('roll-seed').addEventListener('click', () => {
   $('random-seed').checked = false;
   $('seed').value = crypto.getRandomValues(new Uint32Array(1))[0] % 2147483647;
   updateForm();
+});
+$('generation-mode').addEventListener('change', () => {
+  if ($('generation-mode').value !== 'single' && Number($('duration').value) === 60) $('duration').value = $('generation-mode').value === 'mix' ? 300 : 180;
+  updateForm(); updateActivity();
 });
 $('connection-button').addEventListener('click', () => $('connection-dialog').showModal());
 $('help-button').addEventListener('click', () => $('connection-dialog').showModal());
@@ -308,6 +397,7 @@ function applyLanguage() {
   route();
   renderConnection();
   render();
+  renderSessions();
   clearTimeout(toastTimer);
   $('toast').hidden = true;
 }
@@ -324,7 +414,9 @@ health();
 try {
   tracks = await api('/api/tracks');
   render();
-  tracks.filter(track => track.status === 'pending').forEach(track => startPolling(track.id));
+  tracks.filter(track => track.status === 'pending' && !track.sessionId).forEach(track => startPolling(track.id));
 } catch (error) { toast(t('libraryLoadError', { message: errorMessage(error) }), true); }
+try { await refreshSessions(); } catch (error) { toast(errorMessage(error), true); }
+setInterval(() => { refreshSessions().catch(() => {}); }, 3000);
 setInterval(health, 30000);
 setInterval(updateActivity, 1000);

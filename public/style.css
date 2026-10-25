@@ -313,3 +313,24 @@ dialog .primary { width: 100%; margin-top: 18px; }
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+.session-setup { grid-column: 1 / -1; padding: 14px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 10px 14px; align-items: center; }
+.session-setup > label { font-weight: bold; color: #1c3855; }
+.session-setup > select { margin: 0; }
+#session-options { grid-column: 1 / -1; padding: 14px; background: #ecebdc; box-shadow: var(--sunken); display: grid; grid-template-columns: 1fr 1fr; gap: 7px 18px; align-items: start; }
+#session-options > label { grid-column: 1; grid-row: 1; }
+#session-minutes { grid-column: 1; grid-row: 2; margin: 0; }
+#crossfade-option { grid-column: 2; grid-row: 1 / 3; }
+#session-options > p { grid-column: 1 / -1; margin-top: 4px; }
+#session-preview { color: #254d32; font-weight: bold; }
+.sessions-section { margin-top: 24px; }
+.session-card { padding: 16px; margin: 12px 0; box-shadow: var(--sunken); background: #fffef5; }
+.session-card h3 { margin: 0; font-size: 14px; color: #1c3855; }
+.session-state { font: 10px/1.6 var(--mono); color: #32503e; margin: 10px 0; }
+.session-card progress { appearance: none; display: block; width: 100%; height: 17px; border: 2px solid #839080; background: #e8ecdf; accent-color: #436a38; }
+.session-card progress::-webkit-progress-bar { background: #e8ecdf; }
+.session-card progress::-webkit-progress-value { background: repeating-linear-gradient(90deg, #436a38 0 9px, #e8ecdf 9px 12px); }
+.session-card .track-actions { flex-wrap: wrap; }
+.session-files { margin-top: 8px; border-top: 1px solid #bec4b9; }
+.session-files a { display: block; padding: 7px 0; font-size: 11px; color: #113f80; }
+@media (max-width: 620px) { .session-setup { display: block; } .session-setup > select { margin: 8px 0; } #session-options { margin-top: 10px; display: block; } #session-minutes { margin-top: 7px; } #crossfade-option { margin-top: 12px; } }

@@ -5,6 +5,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 import { translate } from './public/i18n.js';
+import { sessionPlan } from './public/session-plan.js';
+import { createSessionManager } from './session-manager.mjs';
+import { assembleMix, ffmpegAvailable } from './audio-mix.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -62,6 +65,9 @@ export function createStudio({
   apiKey = process.env.ACESTEP_API_KEY || '',
   dataDir = join(root, '.data'),
   lan = false,
+  sessionPollMs = 3000,
+  mix = assembleMix,
+  canMix = ffmpegAvailable(),
 } = {}) {
   const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
   if (lan) {
@@ -153,6 +159,15 @@ export function createStudio({
     active.set(track.id, operation);
     try { return await operation; } finally { active.delete(track.id); }
   }
+  async function submitTrack(input, extra = {}) {
+    const accepted = await engine('/release_task', enginePayload(input));
+    if (!accepted.task_id) throw new UserError('errorTaskId', 502);
+    const track = { id: randomUUID(), taskId: accepted.task_id, input, ...extra, createdAt: new Date().toISOString(), status: 'pending', favorite: false };
+    tracks.unshift(track); save();
+    return track;
+  }
+  let generationSubmitting = false;
+  const sessions = createSessionManager({ dataDir, listTracks: () => tracks, submitTrack, syncTrack, assemble: mix, canMix, pollMs: sessionPollMs });
   const server = httpServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -165,14 +180,34 @@ export function createStudio({
         return respond(res, 200, { online: true, health });
       }
       if (req.method === 'GET' && url.pathname === '/api/tracks') return respond(res, 200, tracks.map(publicTrack));
+      if (req.method === 'GET' && url.pathname === '/api/sessions') return respond(res, 200, { sessions: sessions.list(), canMix });
+      if (req.method === 'POST' && url.pathname === '/api/sessions') {
+        const body = await jsonBody(req);
+        if (generationSubmitting) throw new UserError('errorSessionBusy', 409);
+        return respond(res, 202, sessions.start(generationInput(body.input || {}), sessionPlan(body)));
+      }
+      const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio)$/);
+      if (sessionMatch) {
+        const session = sessions.get(sessionMatch[1]);
+        if (!session) throw new UserError('errorSessionNotFound', 404);
+        const action = sessionMatch[2];
+        if (req.method === 'POST' && ['pause', 'resume', 'stop'].includes(action)) return respond(res, 200, sessions.control(session.id, action));
+        if (req.method === 'GET' && action === 'metadata') {
+          res.setHeader('Content-Disposition', `attachment; filename="${session.id}-session.json"`);
+          return respond(res, 200, { schemaVersion: 1, session: sessions.list().find(item => item.id === session.id), tracks: tracks.filter(track => track.sessionId === session.id).map(publicTrack) });
+        }
+        if (req.method === 'GET' && action === 'audio' && session.audioFile) {
+          const path = join(dataDir, 'audio', session.audioFile);
+          res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': statSync(path).size, 'Content-Disposition': `attachment; filename="${session.id}-mix.wav"` });
+          return createReadStream(path).on('error', () => res.destroy()).pipe(res);
+        }
+      }
       if (req.method === 'POST' && url.pathname === '/api/generate') {
         const input = generationInput(await jsonBody(req));
-        const accepted = await engine('/release_task', enginePayload(input));
-        if (!accepted.task_id) throw new UserError('errorTaskId', 502);
-        const track = { id: randomUUID(), taskId: accepted.task_id, input, createdAt: new Date().toISOString(), status: 'pending', favorite: false };
-        tracks.unshift(track);
-        save();
-        return respond(res, 202, publicTrack(track));
+        if (sessions.busy() || generationSubmitting) throw new UserError('errorSessionBusy', 409);
+        generationSubmitting = true;
+        try { return respond(res, 202, publicTrack(await submitTrack(input))); }
+        finally { generationSubmitting = false; }
       }
       const match = url.pathname.match(/^\/api\/tracks\/([a-z0-9-]+)(?:\/(audio|metadata|refresh|favorite))?$/);
       if (match) {
@@ -209,7 +244,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
@@ -219,13 +254,14 @@ export function createStudio({
     } catch (error) {
       if (res.headersSent) { res.destroy(); return; }
       respond(res, error.status || 500, {
-        error: error.status ? error.message : translate('fr', 'errorLocal'),
+        error: error.status ? translate('fr', error.code, error.params) : translate('fr', 'errorLocal'),
         errorCode: error.status ? error.code : 'errorLocal',
         errorParams: error.status ? error.params : {},
       });
       if (!error.status) console.error(error);
     }
   });
+  server.on('close', () => sessions.close());
   return server;
 }
 
@@ -233,7 +269,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const port = Number(process.env.PORT || 3210);
   const host = process.argv.includes('--lan') ? '0.0.0.0' : process.env.HOST || '127.0.0.1';
   if (!['127.0.0.1', '0.0.0.0'].includes(host)) throw new Error('HOST must be 127.0.0.1 or 0.0.0.0.');
-  createStudio({ lan: host === '0.0.0.0' }).listen(port, host, () => {
+  const studio = createStudio({ lan: host === '0.0.0.0' }).listen(port, host, () => {
     console.log(`Afterboot Studio : http://127.0.0.1:${port}`);
     if (host === '0.0.0.0') {
       console.log('LAN mode: shared library and generation access. Use a trusted private network.');
@@ -244,5 +280,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       }
     }
     console.log('Moteur ACE-Step :', process.env.ACESTEP_API_URL || 'http://127.0.0.1:8001');
+  });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+    studio.closeAllConnections();
+    studio.close(() => process.exit(0));
   });
 }
