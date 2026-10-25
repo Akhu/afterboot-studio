@@ -10,7 +10,7 @@ Independent community UI. ACE-Step runs separately and provides all music genera
 
 ## Preview status
 
-Version 0.5.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.6.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -23,6 +23,7 @@ Version 0.5.0 is an early preview. Single-track generation has been reported wor
 - Download WAV, FLAC or MP3 audio and JSON generation metadata.
 - Open the studio from another computer on your private network.
 - Queue 30, 40 or 60 minutes of music, as separate tracks or one WAV mix with crossfades.
+- Randomize each track's requested BPM within a range, and optionally add grain and occasional CD-style skips to a separate audio copy.
 
 Switching UI languages preserves prompts, titles and settings. Preset prompts stay in English. Raw engine messages retain their original language.
 
@@ -100,7 +101,7 @@ The duration field is the maximum length of an individual track. Start with 180 
 
 ACE-Step supports up to [600 seconds per generation](https://github.com/ace-step/ACE-Step-1.5#-features). A 30–40 minute mix is assembled from independently generated tracks. Crossfades soften the transitions; they do not provide beat matching or guarantee continuous composition. The planner adds enough source audio to compensate for overlapping fades.
 
-**FFmpeg is required only for the assembled mix**, on the computer running the Node studio. It is not needed for separate-track sessions. On macOS:
+**FFmpeg is required for assembled mixes and vintage effects**, on the computer running the Node studio. Separate-track sessions without effects, including random BPM, work without it. On macOS:
 
 ~~~bash
 brew install ffmpeg
@@ -111,6 +112,18 @@ Restart the studio after installing FFmpeg. The UI reports whether it is availab
 The queue runs on the server, one track at a time, even with the browser closed. Pause and stop take effect after the current track is saved. A paused session reserves the queue until resumed or stopped. After a server restart, unfinished sessions are paused; resume them explicitly. Keep the studio and engine running and prevent the host computer from sleeping during a session.
 
 Tracks, session plans, seeds and progress are saved in .data. Engine failures pause the session. A submission with an uncertain response is not retried automatically because the engine may already have accepted it. Check ACE-Step before stopping that session and creating another. Already saved tracks are never regenerated on resume. If assembly fails or an engine output is too short to meet the target, all original tracks are retained.
+
+## Vary tempos and add vintage texture
+
+![Random BPM and optional vintage effects](docs/screenshots/tempo-vintage-en.jpg)
+
+In either session mode, enable **Vary tempo between tracks** and enter a minimum and maximum, for example 150 and 200 BPM. Each track receives a uniformly sampled integer BPM, including both endpoints. All choices are saved before the session starts and remain unchanged on retry or resume. The studio updates numeric BPM mentions in the prompt to match, while retaining the original session prompt. These are requested tempos; the model may interpret them differently in the audio. Transitions are crossfades, without automatic beat matching or tempo stretching.
+
+Under **Vintage texture**, choose **Light grain** or **Worn cassette**, and optionally enable **Subtle scratched-CD skips**. Grain adds quiet pink noise, a narrower frequency range and soft saturation. CD skips replace a short section with repeated 68–136 ms fragments, roughly one event per 100 seconds on selected tracks. This is a simulated effect added after generation. It preserves the track's timeline rather than repeating the whole song.
+
+The probability control applies independently to each enabled effect on each track. At 35%, some tracks receive an effect and others remain clean; this is a probability, not an exact quota. Both effects are off by default. Settings, noise seeds and skip positions are recorded in session metadata. The track plan shows the selected tempos and effects before generation.
+
+Processed copies are stereo WAV files, also when the original was MP3 or FLAC. Playback and mix assembly use the processed copy. **Original** downloads the untouched engine output. If processing fails, the session pauses and retains the original. Resume retries the saved processing settings without submitting another generation. Existing sessions and single-track generation keep their previous behavior.
 
 ## Configuration
 

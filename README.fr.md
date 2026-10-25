@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.5.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.6.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -23,6 +23,7 @@ La version 0.5.0 est une préversion. La génération d'un morceau a été signa
 - Téléchargement WAV, FLAC ou MP3 et métadonnées de génération en JSON.
 - Accès depuis un autre ordinateur du réseau privé.
 - Sessions de 30, 40 ou 60 minutes de musique, en pistes séparées ou en mix WAV avec fondus.
+- BPM tiré au hasard dans une plage pour chaque piste, avec grain et sauts façon CD facultatifs sur une copie de l'audio.
 
 Changer la langue conserve les prompts, titres et réglages. Les prompts des préréglages restent en anglais. Les messages bruts du moteur conservent leur langue d'origine.
 
@@ -100,7 +101,7 @@ Le champ de durée devient le maximum par piste. Commence avec 180 secondes pour
 
 ACE-Step accepte jusqu'à [600 secondes par génération](https://github.com/ace-step/ACE-Step-1.5#-features). Un mix de 30–40 minutes assemble donc plusieurs pistes indépendantes. Les fondus adoucissent les transitions ; ils ne garantissent ni un calage sur les temps ni une composition continue. Le plan ajoute assez d'audio source pour compenser les recouvrements des fondus.
 
-**FFmpeg est nécessaire uniquement pour le mix assemblé**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées fonctionnent sans lui. Sur macOS :
+**FFmpeg est nécessaire pour le mix assemblé et les effets vintage**, sur l'ordinateur qui héberge le serveur Node du studio. Les pistes séparées sans effets, même avec des BPM aléatoires, fonctionnent sans lui. Sur macOS :
 
 ~~~bash
 brew install ffmpeg
@@ -111,6 +112,18 @@ Redémarre le studio après l'installation. L'interface indique si FFmpeg est di
 La file fonctionne sur le serveur, une piste à la fois, même si le navigateur est fermé. Pause et arrêt prennent effet après la sauvegarde de la piste en cours. Une session en pause réserve la file jusqu'à sa reprise ou son arrêt. Après un redémarrage du serveur, les sessions inachevées restent en pause et doivent être reprises explicitement. Garde le studio et le moteur ouverts, et empêche la mise en veille de la machine pendant la session.
 
 Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
+
+## Varier les tempos et ajouter une texture vintage
+
+![BPM aléatoires et effets vintage facultatifs](docs/screenshots/tempo-vintage-fr.jpg)
+
+Dans les deux modes de session, active **Varier le tempo entre les pistes**, puis saisis un minimum et un maximum, par exemple 150 et 200 BPM. Chaque piste reçoit un BPM entier tiré uniformément dans cette plage, bornes incluses. Tous les choix sont sauvegardés avant le lancement et restent identiques lors d'un nouvel essai ou d'une reprise. Le studio adapte les mentions numériques de BPM dans le prompt, tout en conservant le prompt original de la session. Ces tempos sont demandés au modèle ; son interprétation dans l'audio peut varier. Les transitions utilisent des fondus, sans calage automatique sur les temps ni modification de vitesse.
+
+Dans **Texture vintage**, choisis **Grain léger** ou **Cassette usée**, et active éventuellement **Petits sauts façon CD rayé**. Le grain ajoute un souffle rose discret, une bande de fréquences plus étroite et une saturation douce. Les sauts CD remplacent une courte portion par des fragments répétés de 68 à 136 ms, à raison d'environ un événement par tranche de 100 secondes sur les pistes sélectionnées. C'est une simulation ajoutée après génération, qui conserve la durée du morceau.
+
+La probabilité s'applique indépendamment à chaque effet activé, pour chaque piste. À 35 %, certaines pistes reçoivent un effet et d'autres restent propres ; ce n'est pas un quota exact. Les deux effets sont désactivés par défaut. Les réglages, seeds du souffle et positions des sauts sont conservés dans les métadonnées. Le plan des pistes affiche les tempos et effets choisis avant la génération.
+
+Les copies traitées sont des WAV stéréo, même si l'original est en MP3 ou FLAC. L'écoute et l'assemblage utilisent la copie traitée. Le bouton **Original** télécharge la sortie intacte du moteur. Si le traitement échoue, la session se met en pause et garde l'original. Reprendre réessaie les réglages sauvegardés sans envoyer une nouvelle génération. Les anciennes sessions et la génération d'un seul morceau conservent leur fonctionnement.
 
 ## Configuration
 

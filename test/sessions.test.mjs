@@ -146,8 +146,10 @@ test('HTTP sessions keep generating without a browser and block manual generatio
     studio = createStudio({ dataDir, engineURL: 'http://127.0.0.1:' + engine.address().port, canMix: false, sessionPollMs: 10 });
     studio.listen(0, '127.0.0.1'); await once(studio, 'listening');
     const base = 'http://127.0.0.1:' + studio.address().port;
-    const request = { input, minutes: 1, mode: 'tracks', segmentSeconds: 20 };
+    const request = { input, minutes: 1, mode: 'tracks', segmentSeconds: 20, tempo: { enabled: true, min: 150, max: 200 } };
     assert.equal((await post(base, '/api/sessions', { ...request, mode: 'mix' })).data.errorCode, 'errorFfmpeg');
+    assert.equal((await post(base, '/api/sessions', { ...request, texture: { grain: 'light', chance: 100 } })).data.errorCode, 'errorFfmpeg');
+    assert.equal(jobs.length, 0);
     const created = await post(base, '/api/sessions', request);
     assert.equal(created.status, 202);
     assert.equal((await post(base, '/api/generate', input)).status, 409);
@@ -158,6 +160,7 @@ test('HTTP sessions keep generating without a browser and block manual generatio
       return sessions[0].status === 'complete';
     });
     assert.equal(jobs.length, 3);
+    assert.ok(jobs.every(job => job.bpm >= 150 && job.bpm <= 200 && job.prompt.includes(job.bpm + ' BPM')));
     const sessions = await (await fetch(base + '/api/sessions')).json();
     assert.equal(sessions.sessions[0].completedCount, 3);
     const library = await (await fetch(base + '/api/tracks')).json();

@@ -76,7 +76,13 @@ function formValues() {
     randomSeed: $('random-seed').checked, seed: Number($('seed').value),
     thinking: $('thinking').checked, format: $('format').value,
     generationMode: $('generation-mode').value, sessionMinutes: Number($('session-minutes').value), crossfadeSeconds: Number($('crossfade').value),
+    tempo: { enabled: $('vary-bpm').checked, min: Number($('bpm-min').value), max: Number($('bpm-max').value) },
+    texture: { grain: $('grain').value, cdSkips: $('cd-skips').checked, chance: Number($('texture-chance').value) },
   };
+}
+function sessionOptions(values = formValues()) {
+  return { mode: values.generationMode, minutes: values.sessionMinutes, segmentSeconds: values.duration,
+    crossfadeSeconds: values.crossfadeSeconds, tempo: values.tempo, texture: values.texture };
 }
 function updateForm() {
   $('prompt-count').textContent = t('characters', { count: $('prompt').value.length });
@@ -87,14 +93,24 @@ function updateForm() {
   document.querySelector('[data-i18n="randomSeed"]').textContent = t(mode === 'single' ? 'randomSeed' : 'randomSessionSeed');
   document.querySelector('[data-i18n="seedHint"]').textContent = t(mode === 'single' ? 'seedHint' : 'sessionSeedHint');
   $('session-options').hidden = mode === 'single';
+  $('bpm-range').hidden = !$('vary-bpm').checked;
+  $('bpm-min').disabled = $('bpm-max').disabled = mode === 'single' || !$('vary-bpm').checked;
+  $('bpm-min').required = $('bpm-max').required = mode !== 'single' && $('vary-bpm').checked;
+  $('bpm').disabled = mode !== 'single' && $('vary-bpm').checked;
+  $('bpm').hidden = $('bpm').disabled;
+  $('bpm-range-display').hidden = !$('bpm').disabled;
+  $('bpm-range-display').textContent = $('bpm-min').value + '–' + $('bpm-max').value;
   $('crossfade-option').hidden = mode !== 'mix';
-  $('mix-requirement').hidden = mode !== 'mix';
+  const values = formValues();
+  const effectsEnabled = values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips);
+  $('mix-requirement').hidden = mode === 'single' || (mode !== 'mix' && !effectsEnabled);
   $('mix-requirement').textContent = t(canMix ? 'mixReady' : 'mixMissing');
   if (mode !== 'single') {
     try {
-      const plan = sessionPlan({ minutes: Number($('session-minutes').value), mode, segmentSeconds: duration, crossfadeSeconds: Number($('crossfade').value) });
+      const plan = sessionPlan(sessionOptions(values));
       $('session-preview').textContent = t('sessionPreview', { count: plan.durations.length, minutes: plan.targetSeconds / 60, min: Math.min(...plan.durations), max: Math.max(...plan.durations) });
-    } catch { $('session-preview').textContent = t('errorSessionPlan'); }
+      if (plan.tempo.enabled) $('session-preview').textContent += ' ' + t('tempoRangeSummary', { min: plan.tempo.min, max: plan.tempo.max });
+    } catch (error) { $('session-preview').textContent = t(error.code || 'errorSessionPlan'); }
   }
   $('duration-display').textContent = Math.floor(duration / 60) + ' min ' + String(duration % 60).padStart(2, '0');
   document.querySelectorAll('[data-duration]').forEach(button => button.classList.toggle('selected', Number(button.dataset.duration) === duration));
@@ -114,6 +130,12 @@ function setForm(input) {
   $('generation-mode').value = input.generationMode || 'single';
   $('session-minutes').value = input.sessionMinutes || 30;
   $('crossfade').value = input.crossfadeSeconds ?? 4;
+  $('vary-bpm').checked = input.tempo?.enabled ?? false;
+  $('bpm-min').value = input.tempo?.min ?? 150;
+  $('bpm-max').value = input.tempo?.max ?? 200;
+  $('grain').value = input.texture?.grain || 'off';
+  $('cd-skips').checked = input.texture?.cdSkips ?? false;
+  $('texture-chance').value = input.texture?.chance ?? 35;
   updateForm();
 }
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
@@ -134,6 +156,13 @@ function action(label, handler, className = '') {
   button.addEventListener('click', handler);
   return button;
 }
+function downloadURL(url) { return url + (url.includes('?') ? '&' : '?') + 'download'; }
+function textureDescription(texture) {
+  const parts = [];
+  if (texture?.grain && texture.grain !== 'off') parts.push(t(texture.grain === 'worn' ? 'grainWorn' : 'grainLight'));
+  if (texture?.events?.length) parts.push(t('cdSkips'));
+  return parts.join(' · ');
+}
 function audioCard(track) {
   const card = node('article', 'track');
   card.dataset.trackId = track.id;
@@ -143,6 +172,7 @@ function audioCard(track) {
   info.append(node('h3', '', track.input.title));
   const meta = node('div', 'track-meta');
   meta.append(node('span', '', track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
+  if (track.texture) meta.append(node('span', '', textureDescription(track.texture)));
   const seedKey = (track.returnedSeed === null || track.returnedSeed === undefined) ? 'seedRequested' : 'seedReturned';
   meta.append(node('span', '', t(seedKey, { seed: seedOf(track) })));
   meta.append(node('span', '', new Date(track.createdAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })));
@@ -172,9 +202,13 @@ function audioCard(track) {
   }
   const buttons = node('div', 'track-actions');
   if (track.status === 'ready') {
-    const download = node('a', 'download', t('downloadAudio', { format: track.input.format.toUpperCase() }));
-    download.href = track.audioURL + '?download'; download.setAttribute('download', '');
+    const download = node('a', 'download', t('downloadAudio', { format: (track.audioFormat || track.input.format).toUpperCase() }));
+    download.href = downloadURL(track.audioURL); download.setAttribute('download', '');
     buttons.append(download);
+    if (track.originalAudioURL) {
+      const original = node('a', '', t('downloadOriginal', { format: track.input.format.toUpperCase() }));
+      original.href = downloadURL(track.originalAudioURL); original.download = ''; buttons.append(original);
+    }
   }
   buttons.append(action(t('reuse'), () => restore(track, false)), action(t('newVariation'), () => restore(track, true)));
   const metadata = node('a', '', t('downloadSettings'));
@@ -228,6 +262,14 @@ function renderSessions() {
     progress.max = session.plan.durations.length; progress.value = session.completedCount;
     progress.setAttribute('aria-label', t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 }));
     card.append(progress);
+    if (session.trackSettings) {
+      const plan = node('details', 'session-files'); plan.append(node('summary', '', t('trackPlan')));
+      const rows = node('ol', 'track-plan');
+      session.trackSettings.forEach((settings, index) => {
+        rows.append(node('li', '', settings.bpm + ' BPM · ' + session.plan.durations[index] + ' s' + (textureDescription(settings.texture) ? ' · ' + textureDescription(settings.texture) : '')));
+      });
+      plan.append(rows); card.append(plan);
+    }
     if (session.errorCode) card.append(node('p', 'track-error', t(session.errorCode, session.errorParams)));
     if (['running', 'pausing', 'stopping'].includes(session.status)) card.append(node('p', 'field-note', t('sessionFinishesTrack')));
     const buttons = node('div', 'track-actions');
@@ -247,7 +289,7 @@ function renderSessions() {
     if (ready.length) {
       const files = node('details', 'session-files'); files.append(node('summary', '', t(ready.length === 1 ? 'sessionFile' : 'sessionFiles', { count: ready.length })));
       for (const track of ready) {
-        const link = node('a', '', '↓ ' + track.input.title); link.href = track.audioURL + '?download'; link.download = ''; files.append(link);
+        const link = node('a', '', '↓ ' + track.input.title + ' · ' + track.input.bpm + ' BPM'); link.href = downloadURL(track.audioURL); link.download = ''; files.append(link);
       }
       card.append(files);
     }
@@ -276,7 +318,13 @@ function updateActivity() {
   const pending = tracks.find(track => polling.has(track.id));
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
-  $('generate').disabled = busy || openSession || ($('generation-mode').value === 'mix' && !canMix);
+  const values = formValues();
+  const needsFfmpeg = values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips)));
+  let invalidPlan = false;
+  if (values.generationMode !== 'single') {
+    try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }
+  }
+  $('generate').disabled = busy || openSession || invalidPlan || (needsFfmpeg && !canMix);
   if (busy || openSession) $('generate').textContent = t(openSession ? 'sessionInProgress' : submitting ? 'sending' : 'generating');
   else {
     const icon = node('span', '', '▶');
@@ -344,7 +392,7 @@ $('generation-form').addEventListener('submit', async (event) => {
     const input = formValues();
     input.title = input.title.trim() || t('untitled');
     if (input.generationMode !== 'single') {
-      const session = await api('/api/sessions', { input, mode: input.generationMode, minutes: input.sessionMinutes, segmentSeconds: input.duration, crossfadeSeconds: input.crossfadeSeconds });
+      const session = await api('/api/sessions', { input, ...sessionOptions(input) });
       sessions.unshift(session); renderSessions();
       $('sessions-section').scrollIntoView({ block: 'nearest' });
       return;

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { createTrackSettings, needsTexture, trackPrompt } from './session-settings.mjs';
 
 const terminal = new Set(['complete', 'stopped']);
 function fail(code, status = 409) { throw Object.assign(new Error(code), { code, status }); }
 
-export function createSessionManager({ dataDir, listTracks, submitTrack, syncTrack, assemble, canMix, pollMs = 3000 }) {
+export function createSessionManager({ dataDir, listTracks, submitTrack, syncTrack, assemble, processTrack, canMix, pollMs = 3000 }) {
   const path = join(dataDir, 'sessions.json');
   const sessions = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : [];
   if (!Array.isArray(sessions)) throw new Error('Invalid sessions.json. File preserved.');
@@ -17,6 +18,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
   }
   for (const session of sessions) {
     if (!terminal.has(session.status)) {
+      if (!session.trackSettings) session.trackSettings = createTrackSettings(session.input, session.plan);
       const recovered = listTracks().find(track => track.sessionId === session.id && track.sessionIndex === session.nextIndex && track.status !== 'failed');
       if (recovered) {
         session.currentTrackId = recovered.id; session.submissionUnknown = false;
@@ -45,6 +47,11 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
         if (closed) return;
         if (track.status === 'pending') return;
         if (track.status === 'failed') fail('errorSessionTrack');
+        const texture = session.trackSettings?.[session.nextIndex]?.texture;
+        if (texture && (texture.grain !== 'off' || texture.events.length) && !track.processedAudioFile) {
+          await processTrack(track, texture, controller.signal);
+          if (closed) return;
+        }
         session.currentTrackId = null;
         session.nextIndex += 1;
         save();
@@ -66,7 +73,8 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
         save(); return;
       }
       const index = session.nextIndex;
-      const input = { ...session.input, duration: session.plan.durations[index], seed: (session.input.seed + index) % 2147483648, title: session.input.title.slice(0, 85) + ' · ' + String(index + 1).padStart(2, '0') };
+      const settings = session.trackSettings[index];
+      const input = { ...session.input, bpm: settings.bpm, prompt: trackPrompt(session.input.prompt, settings.bpm, session.plan.tempo?.enabled), duration: session.plan.durations[index], seed: (session.input.seed + index) % 2147483648, title: session.input.title.slice(0, 85) + ' · ' + String(index + 1).padStart(2, '0') };
       // Persist before sending. An uncertain submission must never be retried automatically.
       session.submissionUnknown = true; save();
       const track = await submitTrack(input, { sessionId: session.id, sessionIndex: index });
@@ -99,8 +107,8 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
     get: id => sessions.find(session => session.id === id),
     start(input, plan) {
       if (closed || busy() || listTracks().some(track => track.status === 'pending')) fail('errorSessionBusy');
-      if (plan.mode === 'mix' && !canMix) fail('errorFfmpeg', 400);
-      const session = { id: randomUUID(), input, plan, status: 'running', nextIndex: 0, trackIds: [], currentTrackId: null, createdAt: new Date().toISOString(), submissionUnknown: false };
+      if ((plan.mode === 'mix' || needsTexture(plan)) && !canMix) fail('errorFfmpeg', 400);
+      const session = { id: randomUUID(), input, plan, trackSettings: createTrackSettings(input, plan), status: 'running', nextIndex: 0, trackIds: [], currentTrackId: null, createdAt: new Date().toISOString(), submissionUnknown: false };
       sessions.unshift(session); save();
       schedule();
       return publicSession(session);

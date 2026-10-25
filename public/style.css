@@ -334,3 +334,12 @@ dialog .primary { width: 100%; margin-top: 18px; }
 .session-files { margin-top: 8px; border-top: 1px solid #bec4b9; }
 .session-files a { display: block; padding: 7px 0; font-size: 11px; color: #113f80; }
 @media (max-width: 620px) { .session-setup { display: block; } .session-setup > select { margin: 8px 0; } #session-options { margin-top: 10px; display: block; } #session-minutes { margin-top: 7px; } #crossfade-option { margin-top: 12px; } }
+.tempo-options, .texture-options { grid-column: 1 / -1; border-top: 1px solid #b7b8a8; padding-top: 10px; margin-top: 4px; }
+.bpm-range { display: grid; grid-template-columns: 1fr 1fr; max-width: 400px; gap: 12px; margin-top: 10px; }
+.bpm-range input { display: block; width: 100%; margin-top: 6px; font: 14px var(--mono); }
+.texture-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: center; }
+.texture-options summary { padding: 5px 0; font-weight: bold; }
+.texture-options > .field-note { margin-top: 10px; }
+.track-plan { padding-left: 25px; margin-top: 0; font: 10px/1.9 var(--mono); }
+.number-field > .tempo-range-value { font: 20px var(--mono); color: #b9e97e; white-space: nowrap; }
+@media (max-width: 620px) { .tempo-options, .texture-options { margin-top: 13px; } .texture-controls { grid-template-columns: 1fr; } }

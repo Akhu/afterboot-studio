@@ -1,6 +1,6 @@
 {
   "name": "afterboot-studio",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A bilingual retro music studio for the official ACE-Step 1.5 API",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/Akhu/afterboot-studio.git" },

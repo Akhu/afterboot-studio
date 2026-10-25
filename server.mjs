@@ -8,6 +8,7 @@ import { translate } from './public/i18n.js';
 import { sessionPlan } from './public/session-plan.js';
 import { createSessionManager } from './session-manager.mjs';
 import { assembleMix, ffmpegAvailable } from './audio-mix.mjs';
+import { renderTexture } from './audio-effects.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -67,6 +68,7 @@ export function createStudio({
   lan = false,
   sessionPollMs = 3000,
   mix = assembleMix,
+  textureRenderer = renderTexture,
   canMix = ffmpegAvailable(),
 } = {}) {
   const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -113,7 +115,10 @@ export function createStudio({
     return value.data ?? value;
   }
   function publicTrack(track) {
-    return { ...track, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio` : null, audioFile: undefined };
+    return { ...track, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio${track.processedAudioFile ? '?version=vintage' : ''}` : null,
+      audioFormat: track.processedAudioFile ? 'wav' : track.input.format,
+      originalAudioURL: track.processedAudioFile ? `/api/tracks/${track.id}/audio?original=1` : null,
+      audioFile: undefined, processedAudioFile: undefined };
   }
   async function syncTrack(track) {
     if (track.status !== 'pending') return track;
@@ -167,7 +172,11 @@ export function createStudio({
     return track;
   }
   let generationSubmitting = false;
-  const sessions = createSessionManager({ dataDir, listTracks: () => tracks, submitTrack, syncTrack, assemble: mix, canMix, pollMs: sessionPollMs });
+  async function processTrack(track, texture, signal) {
+    Object.assign(track, await textureRenderer(track, texture, dataDir, signal));
+    save();
+  }
+  const sessions = createSessionManager({ dataDir, listTracks: () => tracks, submitTrack, syncTrack, assemble: mix, processTrack, canMix, pollMs: sessionPollMs });
   const server = httpServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -184,7 +193,9 @@ export function createStudio({
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
         const body = await jsonBody(req);
         if (generationSubmitting) throw new UserError('errorSessionBusy', 409);
-        return respond(res, 202, sessions.start(generationInput(body.input || {}), sessionPlan(body)));
+        const plan = sessionPlan(body);
+        const input = generationInput({ ...body.input, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
+        return respond(res, 202, sessions.start(input, plan));
       }
       const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio)$/);
       if (sessionMatch) {
@@ -225,11 +236,13 @@ export function createStudio({
           return respond(res, 200, publicTrack(track));
         }
         if (req.method === 'GET' && action === 'audio' && track.audioFile) {
-          const path = join(dataDir, 'audio', track.audioFile);
+          const processed = track.processedAudioFile && !url.searchParams.has('original');
+          const format = processed ? 'wav' : track.input.format;
+          const path = join(dataDir, 'audio', processed ? track.processedAudioFile : track.audioFile);
           const size = statSync(path).size;
           const types = { wav: 'audio/wav', flac: 'audio/flac', mp3: 'audio/mpeg' };
-          const headers = { 'Content-Type': types[track.input.format], 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400' };
-          if (url.searchParams.has('download')) headers['Content-Disposition'] = `attachment; filename="${track.id}.${track.input.format}"`;
+          const headers = { 'Content-Type': types[format], 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400', Vary: 'Range' };
+          if (url.searchParams.has('download')) headers['Content-Disposition'] = `attachment; filename="${track.id}${processed ? '-vintage' : ''}.${format}"`;
           if (req.headers.range) {
             const parts = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
             const start = parts ? Number(parts[1]) : NaN;
