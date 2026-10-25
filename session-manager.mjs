@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createTrackSettings, needsTexture, trackPrompt } from './session-settings.mjs';
 import { hasBackground } from './public/background-noise.js';
 import { hasEnding } from './public/ending.js';
+import { sessionTrackTitle } from './public/session-names.js';
 
 const terminal = new Set(['complete', 'stopped']);
 function fail(code, status = 409) { throw Object.assign(new Error(code), { code, status }); }
@@ -77,7 +78,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
       const index = session.nextIndex;
       const settings = session.trackSettings[index];
       const ending = session.plan.mode === 'tracks' || index === session.plan.durations.length - 1 ? session.plan.ending : { seconds: 0 };
-      const input = { ...session.input, ending, bpm: settings.bpm, prompt: trackPrompt(session.input.prompt, settings.bpm, session.plan.tempo?.enabled), duration: session.plan.durations[index], seed: (session.input.seed + index) % 2147483648, title: session.input.title.slice(0, 85) + ' · ' + String(index + 1).padStart(2, '0') };
+      const input = { ...session.input, ending, bpm: settings.bpm, prompt: trackPrompt(session.input.prompt, settings.bpm, session.plan.tempo?.enabled), duration: session.plan.durations[index], seed: (session.input.seed + index) % 2147483648, title: sessionTrackTitle(session.input.title, index, session.plan.durations.length) };
       // Persist before sending. An uncertain submission must never be retried automatically.
       session.submissionUnknown = true; save();
       const track = await submitTrack(input, { sessionId: session.id, sessionIndex: index });

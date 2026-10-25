@@ -11,9 +11,16 @@ import { assembleMix, ffmpegAvailable } from './audio-mix.mjs';
 import { renderTexture } from './audio-effects.mjs';
 import { backgroundNoise, hasBackground } from './public/background-noise.js';
 import { endingSettings, hasEnding, musicalEndingPrompt } from './public/ending.js';
+import { createSessionExporter } from './session-export.mjs';
+import { safeFileStem, sessionTrackTitle, sessionTrackFilename } from './public/session-names.js';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+function attachment(filename) {
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const encoded = encodeURIComponent(filename).replace(/['()*]/g, character => '%' + character.charCodeAt(0).toString(16).toUpperCase());
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
 
 class UserError extends Error {
   constructor(code, status = 400, params = {}) {
@@ -71,6 +78,7 @@ export function createStudio({
   sessionPollMs = 3000,
   mix = assembleMix,
   textureRenderer = renderTexture,
+  mp3Encoder,
   canMix = ffmpegAvailable(),
 } = {}) {
   const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -119,7 +127,9 @@ export function createStudio({
   const processingVersion = track => hasEnding(track.texture?.ending) ? 'finished' : hasBackground(track.texture?.background) ? 'background' : 'vintage';
   function publicTrack(track) {
     const version = processingVersion(track);
-    return { ...track, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio${track.processedAudioFile ? '?version=' + version : ''}` : null,
+    const session = track.sessionId ? sessions.get(track.sessionId) : null;
+    const displayTitle = session && Number.isInteger(track.sessionIndex) ? sessionTrackTitle(session.input.title, track.sessionIndex, session.plan.durations.length) : track.input.title;
+    return { ...track, displayTitle, audioURL: track.audioFile ? `/api/tracks/${track.id}/audio${track.processedAudioFile ? '?version=' + version : ''}` : null,
       audioFormat: track.processedAudioFile ? 'wav' : track.input.format,
       originalAudioURL: track.processedAudioFile ? `/api/tracks/${track.id}/audio?original=1` : null,
       audioFile: undefined, processedAudioFile: undefined };
@@ -194,6 +204,8 @@ export function createStudio({
     save();
   }
   const sessions = createSessionManager({ dataDir, listTracks: () => tracks, submitTrack, syncTrack, assemble: mix, processTrack, canMix, pollMs: sessionPollMs });
+  const exporter = createSessionExporter({ dataDir, encode: mp3Encoder });
+  const publicSessions = () => sessions.list().map(session => ({ ...session, mp3Export: exporter.status(session.id) }));
   const server = httpServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -206,7 +218,7 @@ export function createStudio({
         return respond(res, 200, { online: true, health });
       }
       if (req.method === 'GET' && url.pathname === '/api/tracks') return respond(res, 200, tracks.map(publicTrack));
-      if (req.method === 'GET' && url.pathname === '/api/sessions') return respond(res, 200, { sessions: sessions.list(), canMix });
+      if (req.method === 'GET' && url.pathname === '/api/sessions') return respond(res, 200, { sessions: publicSessions(), canMix });
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
         const body = await jsonBody(req);
         if (generationSubmitting || finishing) throw new UserError('errorSessionBusy', 409);
@@ -214,15 +226,25 @@ export function createStudio({
         const input = generationInput({ ...body.input, background: { type: 'off' }, ending: { seconds: 0 }, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
         return respond(res, 202, sessions.start(input, plan));
       }
-      const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio)$/);
+      const sessionMatch = url.pathname.match(/^\/api\/sessions\/([a-z0-9-]+)\/(pause|resume|stop|metadata|audio|mp3)$/);
       if (sessionMatch) {
         const session = sessions.get(sessionMatch[1]);
         if (!session) throw new UserError('errorSessionNotFound', 404);
         const action = sessionMatch[2];
+        if (req.method === 'POST' && action === 'mp3') {
+          if (!canMix) throw new UserError('errorFfmpeg');
+          return respond(res, 200, await exporter.prepare(session, tracks));
+        }
+        if (req.method === 'GET' && action === 'mp3') {
+          const archive = exporter.file(session.id);
+          res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': statSync(archive.path).size,
+            'Content-Disposition': attachment(archive.filename), 'Cache-Control': 'no-store' });
+          return createReadStream(archive.path).on('error', () => res.destroy()).pipe(res);
+        }
         if (req.method === 'POST' && ['pause', 'resume', 'stop'].includes(action)) return respond(res, 200, sessions.control(session.id, action));
         if (req.method === 'GET' && action === 'metadata') {
           res.setHeader('Content-Disposition', `attachment; filename="${session.id}-session.json"`);
-          return respond(res, 200, { schemaVersion: 1, session: sessions.list().find(item => item.id === session.id), tracks: tracks.filter(track => track.sessionId === session.id).map(publicTrack) });
+          return respond(res, 200, { schemaVersion: 1, session: publicSessions().find(item => item.id === session.id), tracks: tracks.filter(track => track.sessionId === session.id).map(publicTrack) });
         }
         if (req.method === 'GET' && action === 'audio' && session.audioFile) {
           const path = join(dataDir, 'audio', session.audioFile);
@@ -276,7 +298,11 @@ export function createStudio({
           const size = statSync(path).size;
           const types = { wav: 'audio/wav', flac: 'audio/flac', mp3: 'audio/mpeg' };
           const headers = { 'Content-Type': types[format], 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400', Vary: 'Range' };
-          if (url.searchParams.has('download')) headers['Content-Disposition'] = `attachment; filename="${track.id}${processed ? '-' + processingVersion(track) : ''}.${format}"`;
+          if (url.searchParams.has('download')) {
+            const session = track.sessionId ? sessions.get(track.sessionId) : null;
+            const stem = session && Number.isInteger(track.sessionIndex) ? sessionTrackFilename(session.input.title, track.sessionIndex, session.plan.durations.length).slice(0, -4) : safeFileStem(track.input.title);
+            headers['Content-Disposition'] = attachment(stem + (url.searchParams.has('original') ? '-original' : '') + '.' + format);
+          }
           if (req.headers.range) {
             const parts = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
             const start = parts ? Number(parts[1]) : NaN;
@@ -291,7 +317,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
@@ -308,7 +334,7 @@ export function createStudio({
       if (!error.status) console.error(error);
     }
   });
-  server.on('close', () => sessions.close());
+  server.on('close', () => { sessions.close(); exporter.close(); });
   return server;
 }
 

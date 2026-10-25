@@ -10,7 +10,7 @@ Interface communautaire indépendante. ACE-Step fonctionne séparément et assur
 
 ## État du projet
 
-La version 0.8.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.9.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -26,6 +26,7 @@ La version 0.8.0 est une préversion. La génération d'un morceau a été signa
 - BPM tiré au hasard dans une plage pour chaque piste, avec grain et sauts façon CD facultatifs sur une copie de l'audio.
 - Fond sonore continu blanc, rose, brun ou sombre, avec un volume réglable, y compris pendant les transitions du mix.
 - Demande d'outro musicale et fin adoucie, y compris pour les morceaux déjà en bibliothèque, en conservant les originaux.
+- Téléchargement des titres finalisés d'une session en MP3 séparés, nommés et numérotés automatiquement, dans un ZIP.
 
 Changer la langue conserve les prompts, titres et réglages. Les prompts des préréglages restent en anglais. Les messages bruts du moteur conservent leur langue d'origine.
 
@@ -37,7 +38,7 @@ La seed seule ne garantit pas une reproduction identique entre versions de modè
 - Une API REST ACE-Step 1.5 installée et fonctionnelle avec le modèle Turbo.
 - Un navigateur récent.
 
-Aucune dépendance npm à installer pour cette interface. ACE-Step conserve ses propres dépendances et téléchargements de modèles. Commence par son [guide d'installation](https://github.com/ace-step/ACE-Step-1.5#readme).
+Lance `npm ci --ignore-scripts` pour installer la bibliothèque ZIP du studio et ses dépendances de développement. ACE-Step conserve ses propres dépendances et téléchargements de modèles. Commence par son [guide d'installation](https://github.com/ace-step/ACE-Step-1.5#readme).
 
 ## Démarrage local
 
@@ -54,12 +55,13 @@ Dans un second terminal :
 ~~~bash
 git clone https://github.com/Akhu/afterboot-studio.git
 cd afterboot-studio
+npm ci --ignore-scripts
 npm start
 ~~~
 
 Ouvre [Afterboot Studio](http://127.0.0.1:3210).
 
-Sur macOS, tu peux aussi double-cliquer sur `Lancer le studio.command`. Ce fichier démarre uniquement l'interface. Lance ACE-Step séparément.
+Sur macOS, tu peux aussi double-cliquer sur `Lancer le studio.command`. Il installe ou met à jour les dépendances du studio quand c'est nécessaire, puis démarre l'interface. Lance ACE-Step séparément. Pour mettre à jour une installation existante, lance `git pull`, puis `npm ci --ignore-scripts`, et redémarre Afterboot.
 
 Pour commencer, essaie 60 secondes à 170 BPM. L'interface accepte 10 à 600 secondes, mais ton moteur et ton matériel peuvent imposer des limites inférieures.
 
@@ -114,6 +116,16 @@ Redémarre le studio après l'installation. L'interface indique si FFmpeg est di
 La file fonctionne sur le serveur, une piste à la fois, même si le navigateur est fermé. Pause et arrêt prennent effet après la sauvegarde de la piste en cours. Une session en pause réserve la file jusqu'à sa reprise ou son arrêt. Après un redémarrage du serveur, les sessions inachevées restent en pause et doivent être reprises explicitement. Garde le studio et le moteur ouverts, et empêche la mise en veille de la machine pendant la session.
 
 Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
+
+## Télécharger une session en MP3 séparés
+
+![Pistes numérotées et export MP3 groupé en ZIP](docs/screenshots/session-export-fr.png)
+
+Sur une session terminée, arrêtée ou en pause, clique sur **Les N titres · MP3 ZIP**. Afterboot prépare un ZIP contenant un MP3 par piste finalisée, dans l'ordre de la session. Une session nommée **Afterhours** donne `Afterhours - 01.mp3`, `Afterhours - 02.mp3`, etc. L'interface reprend ces mêmes titres numérotés, y compris pour les anciennes sessions. Les caractères interdits dans les noms de fichiers Windows sont remplacés ; les accents sont conservés. Les tags MP3 indiquent la session comme album, le titre et le numéro de piste.
+
+FFmpeg convertit les sources WAV, FLAC et les copies traitées en MP3 à 320 kbit/s. Les MP3 du moteur sans traitement sont copiés sans nouvelle compression audio. L'export reprend les pistes individuelles actuelles, avec leurs effets et leurs fins adoucies quand ils sont déjà présents sur ces pistes. Il ne découpe pas le mix assemblé : les traitements appliqués uniquement au mix final, comme son fond sonore continu, restent dans ce mix. Les originaux sont conservés et aucune génération musicale n'est relancée.
+
+La carte de session affiche la progression. Pour une session arrêtée ou en pause, le ZIP contient uniquement les pistes finalisées, en excluant les tentatives échouées et les traitements inachevés. Les archives sont conservées dans `.data/exports` et réutilisées après redémarrage. Une modification des fichiers source déclenche un nouvel export. Le lanceur macOS et les instructions ci-dessus installent la dépendance ZIP ; FFmpeg doit aussi être disponible sur l'ordinateur du studio.
 
 ## Ajouter un fond sonore continu
 

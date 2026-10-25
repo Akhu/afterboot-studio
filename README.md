@@ -10,7 +10,7 @@ Independent community UI. ACE-Step runs separately and provides all music genera
 
 ## Preview status
 
-Version 0.8.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.9.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -26,6 +26,7 @@ Version 0.8.0 is an early preview. Single-track generation has been reported wor
 - Randomize each track's requested BPM within a range, and optionally add grain and occasional CD-style skips to a separate audio copy.
 - Add continuous white, pink, brown or dark background noise with adjustable volume, including across mix transitions.
 - Request musical outros and soften endings, including on existing library tracks, while keeping originals.
+- Download all finalized session tracks as separate, automatically numbered MP3 files in one ZIP.
 
 Switching UI languages preserves prompts, titles and settings. Preset prompts stay in English. Raw engine messages retain their original language.
 
@@ -37,7 +38,7 @@ A seed alone does not guarantee identical audio across different model versions,
 - An installed and working ACE-Step 1.5 REST API with the Turbo model.
 - A modern browser.
 
-This project has no npm dependencies. ACE-Step has its own installation requirements and model downloads. Follow its [installation guide](https://github.com/ace-step/ACE-Step-1.5#readme) first.
+Run `npm ci --ignore-scripts` to install the studio's ZIP library and development dependencies. ACE-Step has its own installation requirements and model downloads. Follow its [installation guide](https://github.com/ace-step/ACE-Step-1.5#readme) first.
 
 ## Start locally
 
@@ -54,12 +55,13 @@ In a second terminal:
 ~~~bash
 git clone https://github.com/Akhu/afterboot-studio.git
 cd afterboot-studio
+npm ci --ignore-scripts
 npm start
 ~~~
 
 Open [Afterboot Studio](http://127.0.0.1:3210).
 
-On macOS, you can also double-click `Lancer le studio.command`. It starts the UI only. Start ACE-Step separately.
+On macOS, you can also double-click `Lancer le studio.command`. It installs or updates the studio dependencies when needed and starts the UI. Start ACE-Step separately. When updating an existing checkout, run `git pull`, then `npm ci --ignore-scripts`, and restart Afterboot.
 
 Try 60 seconds at 170 BPM first. The UI supports 10–600 seconds, but your engine and hardware may impose lower limits.
 
@@ -114,6 +116,16 @@ Restart the studio after installing FFmpeg. The UI reports whether it is availab
 The queue runs on the server, one track at a time, even with the browser closed. Pause and stop take effect after the current track is saved. A paused session reserves the queue until resumed or stopped. After a server restart, unfinished sessions are paused; resume them explicitly. Keep the studio and engine running and prevent the host computer from sleeping during a session.
 
 Tracks, session plans, seeds and progress are saved in .data. Engine failures pause the session. A submission with an uncertain response is not retried automatically because the engine may already have accepted it. Check ACE-Step before stopping that session and creating another. Already saved tracks are never regenerated on resume. If assembly fails or an engine output is too short to meet the target, all original tracks are retained.
+
+## Download a session as separate MP3 tracks
+
+![Numbered tracks and one-click MP3 ZIP export](docs/screenshots/session-export-en.png)
+
+On a completed, stopped or paused session, click **All N tracks · MP3 ZIP**. Afterboot prepares one ZIP with one MP3 for each finalized track, in session order. An example session called **Afterhours** produces `Afterhours - 01.mp3`, `Afterhours - 02.mp3`, and so on. Session tracks use the same numbered titles in the UI, including older sessions. Windows-incompatible filename characters are replaced, and accents are preserved. MP3 tags include the session as album, the track title and its sequence number.
+
+FFmpeg converts WAV, FLAC and processed audio copies to 320 kb/s MP3. Unprocessed engine MP3 files are copied without another lossy encode. The export uses the current individual tracks, including any effects or softened endings already present on those tracks. It does not split the assembled mix: effects applied only to the final mix, such as a continuous mix-wide background, remain in that mix. Original files stay intact and no music generation is submitted.
+
+Progress appears on the session card. For a paused or stopped session, the ZIP contains only finalized tracks; failed attempts and unfinished processing are excluded. Prepared archives are cached in `.data/exports` and reused after restart. Changes to the source files trigger a fresh export. The macOS launcher and command-line instructions above install the ZIP dependency; FFmpeg must also be available on the studio computer.
 
 ## Add continuous background noise
 

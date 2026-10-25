@@ -2,6 +2,7 @@ import { translate, preferredLanguage } from '/i18n.js';
 import { sessionPlan } from '/session-plan.js';
 import { hasBackground } from '/background-noise.js';
 import { hasEnding } from '/ending.js';
+import { completedSessionTracks, sessionTrackTitle } from '/session-names.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -24,6 +25,7 @@ const presets = {
 };
 let tracks = [], online = false, connectionChecked = false, submitting = false, favoritesOnly = false, toastTimer;
 let sessions = [], canMix = false, sessionRefresh = false;
+const exportingSessions = new Set();
 const polling = new Map();
 
 function node(tag, className, text) {
@@ -39,14 +41,14 @@ function toast(text, error = false) {
   $('toast').hidden = false;
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, error ? 15000 : 5000);
 }
-async function api(path, body) {
+async function api(path, body, timeout = 180000) {
   let response;
   try {
     response = await fetch(path, {
       method: body === undefined ? 'GET' : 'POST',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(180000),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch (error) { throw uiError(error.name === 'TimeoutError' ? 'errorTimeout' : 'errorNetwork'); }
   let data;
@@ -93,6 +95,8 @@ function updateForm() {
   $('seed').disabled = $('random-seed').checked;
   const duration = Number($('duration').value);
   const mode = $('generation-mode').value;
+  document.querySelector('[data-i18n="trackName"]').textContent = t(mode === 'single' ? 'trackName' : 'sessionName');
+  $('track-title').placeholder = t(mode === 'single' ? 'titlePlaceholder' : 'sessionTitlePlaceholder');
   document.querySelector('[data-i18n="duration"]').textContent = t(mode === 'single' ? 'duration' : 'perTrackDuration');
   document.querySelector('[data-i18n="randomSeed"]').textContent = t(mode === 'single' ? 'randomSeed' : 'randomSessionSeed');
   document.querySelector('[data-i18n="seedHint"]').textContent = t(mode === 'single' ? 'seedHint' : 'sessionSeedHint');
@@ -159,7 +163,7 @@ function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); 
 function restore(track, variation) {
   const returnedSeed = Number(seedOf(track).split(',')[0]);
   setForm({
-    ...track.input, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: track.input.title + (variation ? t('variationSuffix') : ''),
+    ...track.input, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: (track.displayTitle || track.input.title) + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
   });
@@ -187,12 +191,13 @@ function backgroundDescription(background) {
   return t(key) + ' · ' + background.levelDb + ' dB';
 }
 function audioCard(track) {
+  const title = track.displayTitle || track.input.title;
   const card = node('article', 'track');
   card.dataset.trackId = track.id;
   const heading = node('div', 'track-heading');
   heading.append(node('span', 'track-disc', '◎'));
   const info = node('div', 'track-info');
-  info.append(node('h3', '', track.input.title));
+  info.append(node('h3', '', title));
   const meta = node('div', 'track-meta');
   meta.append(node('span', '', track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
   if (track.texture) meta.append(node('span', '', textureDescription(track.texture)));
@@ -211,7 +216,7 @@ function audioCard(track) {
       if (favoritesOnly) renderLibrary();
     } catch (error) { toast(errorMessage(error), true); }
   }, 'favorite');
-  favorite.setAttribute('aria-label', t('favoriteTrack', { title: track.input.title }));
+  favorite.setAttribute('aria-label', t('favoriteTrack', { title }));
   favorite.setAttribute('aria-pressed', String(track.favorite));
   heading.append(info, favorite); card.append(heading);
   if (track.status === 'ready') {
@@ -274,7 +279,7 @@ function fillList(id, values, emptyMessage) {
 }
 function renderLibrary() {
   const term = $('search').value.toLowerCase().trim();
-  const visible = tracks.filter(track => (!favoritesOnly || track.favorite) && (track.input.title + ' ' + track.input.prompt + ' ' + seedOf(track)).toLowerCase().includes(term));
+  const visible = tracks.filter(track => (!favoritesOnly || track.favorite) && ((track.displayTitle || track.input.title) + ' ' + track.input.prompt + ' ' + seedOf(track)).toLowerCase().includes(term));
   fillList('library-tracks', visible, tracks.length && !visible.length ? t('noMatches') : '');
   $('library-count').textContent = t(visible.length === 1 ? 'trackCountOne' : 'trackCountMany', { count: visible.length });
 }
@@ -303,7 +308,7 @@ function renderSessions() {
       const plan = node('details', 'session-files'); plan.append(node('summary', '', t('trackPlan')));
       const rows = node('ol', 'track-plan');
       session.trackSettings.forEach((settings, index) => {
-        rows.append(node('li', '', settings.bpm + ' BPM · ' + session.plan.durations[index] + ' s' + (textureDescription(settings.texture) ? ' · ' + textureDescription(settings.texture) : '')));
+        rows.append(node('li', '', sessionTrackTitle(session.input.title, index, session.plan.durations.length) + ' · ' + settings.bpm + ' BPM · ' + session.plan.durations[index] + ' s' + (textureDescription(settings.texture) ? ' · ' + textureDescription(settings.texture) : '')));
       });
       plan.append(rows); card.append(plan);
     }
@@ -320,13 +325,35 @@ function renderSessions() {
     if (session.audioURL) {
       const download = node('a', 'download', t('downloadMix')); download.href = session.audioURL; download.download = ''; buttons.append(download);
     }
+    const exportable = completedSessionTracks(session, tracks);
+    if (exportable.length && ['complete', 'stopped', 'paused'].includes(session.status)) {
+      const exportButton = action(t('downloadSessionMp3', { count: exportable.length }), async () => {
+        exportingSessions.add(session.id); renderSessions();
+        try {
+          const result = await api('/api/sessions/' + session.id + '/mp3', {}, 30 * 60 * 1000);
+          await refreshSessions();
+          const link = node('a'); link.href = result.downloadURL; link.download = '';
+          document.body.append(link); link.click(); link.remove();
+          toast(t('exportDownloadStarted'));
+        } catch (error) { toast(errorMessage(error), true); }
+        finally { exportingSessions.delete(session.id); renderSessions(); }
+      }, 'download');
+      exportButton.disabled = exportingSessions.has(session.id) || session.mp3Export?.status === 'preparing';
+      if (exportButton.disabled) exportButton.textContent = t('exportPreparing');
+      buttons.append(exportButton);
+    }
+    if (session.mp3Export?.status === 'ready') {
+      const archive = node('a', '', t('downloadPreparedZip')); archive.href = session.mp3Export.downloadURL; archive.download = ''; buttons.append(archive);
+    }
     const metadata = node('a', '', t('downloadSessionSettings')); metadata.href = '/api/sessions/' + session.id + '/metadata'; metadata.download = ''; buttons.append(metadata);
     card.append(buttons);
+    if (session.mp3Export?.status === 'preparing') card.append(node('p', 'field-note', t('exportProgress', { count: session.mp3Export.completedCount, total: session.mp3Export.total })));
+    if (session.mp3Export?.status === 'error') card.append(node('p', 'track-error', t(session.mp3Export.errorCode)));
     const ready = session.trackIds.map(id => tracks.find(track => track.id === id)).filter(track => track?.status === 'ready');
     if (ready.length) {
       const files = node('details', 'session-files'); files.append(node('summary', '', t(ready.length === 1 ? 'sessionFile' : 'sessionFiles', { count: ready.length })));
       for (const track of ready) {
-        const link = node('a', '', '↓ ' + track.input.title + ' · ' + track.input.bpm + ' BPM'); link.href = downloadURL(track.audioURL); link.download = ''; files.append(link);
+        const link = node('a', '', '↓ ' + (track.displayTitle || track.input.title) + ' · ' + track.input.bpm + ' BPM'); link.href = downloadURL(track.audioURL); link.download = ''; files.append(link);
       }
       card.append(files);
     }

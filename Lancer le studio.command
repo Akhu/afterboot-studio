@@ -17,6 +17,14 @@ if [ -z "$STUDIO_NODE" ] || ! "$STUDIO_NODE" -e 'process.exit(Number(process.ver
   read -r -p "Appuie sur Entrée pour fermer."
   exit 1
 fi
+export PATH="$(dirname "$STUDIO_NODE"):$PATH"
+if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+  echo "Installation des composants du studio…"
+  if ! npm ci --ignore-scripts --no-audit --no-fund; then
+    read -r -p "Installation impossible. Appuie sur Entrée pour fermer."
+    exit 1
+  fi
+fi
 echo "Garde cette fenêtre ouverte pendant l’utilisation du studio."
 echo "L’API ACE-Step doit être lancée séparément sur le port 8001."
 (sleep 1; open "http://127.0.0.1:3210") &

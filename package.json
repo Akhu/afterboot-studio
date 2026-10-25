@@ -1,15 +1,26 @@
 {
   "name": "afterboot-studio",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "A bilingual retro music studio for the official ACE-Step 1.5 API",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/Akhu/afterboot-studio.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Akhu/afterboot-studio.git"
+  },
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.mjs",
     "start:lan": "node server.mjs --lan",
     "test": "node --test"
+  },
+  "dependencies": {
+    "yazl": "3.3.1"
+  },
+  "devDependencies": {
+    "yauzl": "3.4.0"
   }
 }
