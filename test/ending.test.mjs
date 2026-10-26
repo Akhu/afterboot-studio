@@ -121,6 +121,7 @@ test('HTTP finishing repairs existing processed tracks, keeps originals, and ret
   const dataDir = mkdtempSync(join(tmpdir(), 'afterboot-finish-api-')), jobs = [], renderInputs = [];
   let polls = 0, downloads = 0, studio, failEnding = true;
   const engine = createServer(async (req, res) => {
+    if (req.url === '/v1/model_inventory') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 200, data: { models: [{ name: 'acestep-v15-turbo', is_loaded: true }] } })); return; }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     if (req.url.startsWith('/v1/audio')) { downloads++; res.end(tone(10)); return; }

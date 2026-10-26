@@ -17,7 +17,7 @@ Version 0.10.0 is an early preview. Single-track generation has been reported wo
 - Switch between English and French. Your language choice is saved per browser.
 - Create instrumentals with a prompt, BPM, duration and a visible seed.
 - Start with jungle, liquid DnB and ambient presets.
-- Use ACE-Step Turbo with 8 steps, one track at a time, and optional 5Hz LM planning.
+- Choose Standard Turbo or XL Turbo with 8 steps, one track at a time, and optional 5Hz LM planning.
 - Follow actual job status and resume tracking after reloading the page.
 - Listen, search, mark favorites and restore a track's generation settings.
 - Download WAV, FLAC or MP3 audio and JSON generation metadata.
@@ -118,6 +118,10 @@ The queue runs on the server, one track at a time, even with the browser closed.
 Tracks, session plans, seeds and progress are saved in .data. Engine failures pause the session. A submission with an uncertain response is not retried automatically because the engine may already have accepted it. Check ACE-Step before stopping that session and creating another. Already saved tracks are never regenerated on resume. If assembly fails or an engine output is too short to meet the target, all original tracks are retained.
 
 ## Control inference and export loudness
+
+Under **Inference and loudness → Music model**, choose **Standard Turbo** or **XL Turbo**. The studio reads installed models from the ACE-Step API and disables missing models. To install XL Turbo, run `acestep-download --model acestep-v15-xl-turbo` in your ACE-Step environment, then recheck the studio connection or reload the page.
+
+The selected model loads on the first generation that uses it, which can add up to two minutes before submitting the track. The studio checks that ACE-Step’s queue is idle before replacing a loaded model. The existing LM planner is kept. Both Turbo models use 8 steps. The choice is saved in the draft, track and session settings, and restored when reusing a track. Older tracks keep Standard Turbo. This uses the official `/v1/model_inventory`, `/v1/stats` and `/v1/init` endpoints; no launcher changes are needed.
 
 ![Inference and loudness controls](docs/screenshots/inference-en.png)
 

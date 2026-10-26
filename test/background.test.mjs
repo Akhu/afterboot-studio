@@ -102,6 +102,7 @@ test('single-track noise retries archived audio after restart and keeps original
   const dataDir = directory();
   let submissions = 0, polls = 0, downloads = 0, renders = 0, studio;
   const engine = createServer(async (req, res) => {
+    if (req.url === '/v1/model_inventory') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 200, data: { models: [{ name: 'acestep-v15-turbo', is_loaded: true }] } })); return; }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     if (req.url.startsWith('/v1/audio')) { downloads++; res.end('original-mp3'); return; }

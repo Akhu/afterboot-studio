@@ -17,7 +17,7 @@ La version 0.10.0 est une préversion. La génération d'un morceau a été sign
 - Interface en anglais et français, avec mémorisation du choix par navigateur.
 - Création d'instrumentaux avec prompt, tempo, durée et seed toujours visibles.
 - Préréglages jungle, liquid DnB et ambient.
-- ACE-Step Turbo, 8 étapes, un morceau à la fois et planification 5Hz LM facultative.
+- Choix entre Turbo standard et XL Turbo, 8 étapes, un morceau à la fois et planification 5Hz LM facultative.
 - Suivi réel des tâches, repris après rechargement de la page.
 - Écoute, recherche, favoris et reprise des paramètres d'un morceau.
 - Téléchargement WAV, FLAC ou MP3 et métadonnées de génération en JSON.
@@ -118,6 +118,10 @@ La file fonctionne sur le serveur, une piste à la fois, même si le navigateur 
 Les pistes, plans de session, seeds et états sont sauvegardés dans .data. Une erreur du moteur met la session en pause. Un envoi dont la réponse est incertaine n'est jamais réessayé automatiquement : le moteur peut déjà l'avoir accepté. Vérifie ACE-Step avant d'arrêter cette session et d'en créer une autre. La reprise ne régénère pas les pistes sauvegardées. Si l'assemblage échoue ou si une sortie du moteur est trop courte pour atteindre la cible, tous les originaux sont conservés.
 
 ## Régler l’inférence et le volume d’export
+
+Dans **Inférence et volume → Modèle musical**, choisis **Turbo standard** ou **XL Turbo**. Le studio lit les modèles installés depuis l’API ACE-Step ; un modèle absent est désactivé. Pour installer XL Turbo, lance `acestep-download --model acestep-v15-xl-turbo` dans ton environnement ACE-Step, puis vérifie la connexion du studio ou recharge la page.
+
+Le modèle choisi est chargé à la première génération qui l’utilise, avec un délai possible de deux minutes avant l’envoi du morceau. Le studio vérifie que la file ACE-Step est vide avant de remplacer un modèle chargé. Le planificateur LM déjà chargé est conservé. Les deux modèles Turbo utilisent 8 étapes. Le choix est conservé dans le brouillon, les paramètres du morceau et ceux de la session ; reprendre les réglages d’un morceau restaure aussi son modèle. Les anciens morceaux restent associés à Turbo standard. Cette fonction utilise les routes officielles `/v1/model_inventory`, `/v1/stats` et `/v1/init` ; aucune modification du lanceur n’est nécessaire.
 
 ![Réglages d’inférence et de volume](docs/screenshots/inference-fr.png)
 

@@ -126,6 +126,7 @@ test('HTTP sessions keep generating without a browser and block manual generatio
   const dataDir = directory(), jobs = [];
   let release = false;
   const engine = createServer(async (req, res) => {
+    if (req.url === '/v1/model_inventory') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 200, data: { models: [{ name: 'acestep-v15-turbo', is_loaded: true }] } })); return; }
     let body = ''; for await (const chunk of req) body += chunk;
     const value = body ? JSON.parse(body) : {};
     const path = new URL(req.url, 'http://localhost').pathname;

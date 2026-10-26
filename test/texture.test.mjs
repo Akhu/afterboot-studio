@@ -136,6 +136,7 @@ test('HTTP audio serves separate vintage and original files with correct formats
   const dataDir = directory(), jobs = [];
   const original = Buffer.from('original-mp3-fixture'), processed = Buffer.from('processed-wav-fixture');
   const engine = createServer(async (req, res) => {
+    if (req.url === '/v1/model_inventory') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 200, data: { models: [{ name: 'acestep-v15-turbo', is_loaded: true }] } })); return; }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : {};
     if (req.url.startsWith('/v1/audio')) { res.end(original); return; }

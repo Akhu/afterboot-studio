@@ -46,6 +46,7 @@ test('official API contract: submit, poll, archive audio and exact metadata, res
   let received, polls = 0, mode = 'success';
   const audio = Buffer.from('RIFF-test-audio-data-WAVE');
   const fake = createServer(async (req, res) => {
+    if (req.url === '/v1/model_inventory') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ code: 200, data: { models: [{ name: 'acestep-v15-turbo', is_loaded: true }] } })); return; }
     let body = '';
     for await (const chunk of req) body += chunk;
     const payload = body ? JSON.parse(body) : {};

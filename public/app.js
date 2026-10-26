@@ -5,6 +5,7 @@ import { stableArrangement, inferenceSettings } from '/inference-settings.js';
 import { hasMastering, masteringSettings } from '/mastering.js';
 import { hasEnding } from '/ending.js';
 import { completedSessionTracks, sessionTrackTitle } from '/session-names.js';
+import { musicModel } from '/music-models.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -27,6 +28,7 @@ const presets = {
 };
 let tracks = [], online = false, connectionChecked = false, submitting = false, favoritesOnly = false, toastTimer;
 let sessions = [], canMix = false, sessionRefresh = false;
+let availableModels = [];
 const exportingSessions = new Set();
 const polling = new Map();
 
@@ -67,12 +69,14 @@ function renderConnection() {
 async function health() {
   try {
     await api('/api/health');
+    availableModels = (await api('/api/models')).models;
     online = true;
   } catch {
     online = false;
   }
   connectionChecked = true;
   renderConnection();
+  updateForm();
   return online;
 }
 function formValues() {
@@ -80,7 +84,7 @@ function formValues() {
     title: $('track-title').value, prompt: $('prompt').value,
     bpm: Number($('bpm').value), duration: Number($('duration').value),
     randomSeed: $('random-seed').checked, seed: Number($('seed').value),
-    thinking: $('thinking').checked, format: $('format').value,
+    thinking: $('thinking').checked, format: $('format').value, model: $('music-model').value,
     inference: { temperature: Number($('lm-temperature').value), topP: Number($('lm-top-p').value), topK: Number($('lm-top-k').value), arrangement: $('arrangement').value },
     mastering: { enabled: $('mastering-enabled').checked, targetLufs: Number($('target-lufs').value), compression: $('gentle-compression').checked },
     generationMode: $('generation-mode').value, sessionMinutes: Number($('session-minutes').value), crossfadeSeconds: Number($('crossfade').value),
@@ -114,6 +118,9 @@ function updateForm() {
   $('bpm-range-display').textContent = $('bpm-min').value + '–' + $('bpm-max').value;
   $('crossfade-option').hidden = mode !== 'mix';
   const values = formValues();
+  const selectedModel = availableModels.find(model => model.id === values.model);
+  for (const option of $('music-model').options) option.disabled = !availableModels.some(model => model.id === option.value && model.available);
+  $('model-hint').textContent = !connectionChecked ? t('modelsChecking') : !online ? t('offlineFeedback') : !selectedModel?.available ? t('errorModelUnavailable', { model: values.model }) : t(values.model === 'acestep-v15-xl-turbo' ? 'modelXlHint' : 'modelTurboHint') + (selectedModel.loaded ? '' : ' ' + t('modelFirstLoad'));
   for (const id of ['lm-temperature', 'lm-top-p', 'lm-top-k']) $(id).disabled = !values.thinking;
   $('target-lufs').disabled = $('gentle-compression').disabled = !hasMastering(values.mastering);
   $('background-volume').disabled = !hasBackground(values.background);
@@ -145,6 +152,7 @@ function setForm(input) {
   $('random-seed').checked = input.randomSeed ?? true;
   $('thinking').checked = input.thinking ?? true;
   $('format').value = input.format || 'wav';
+  $('music-model').value = input.model || 'acestep-v15-turbo';
   $('lm-temperature').value = input.inference?.temperature ?? 0.85;
   $('lm-top-p').value = input.inference?.topP ?? 0.9;
   $('lm-top-k').value = input.inference?.topK ?? 0;
@@ -400,7 +408,8 @@ function updateActivity() {
   const values = formValues();
   const needsFfmpeg = hasMastering(values.mastering) || hasEnding(values.ending) || hasBackground(values.background) || (values.generationMode !== 'single' && (values.generationMode === 'mix' || (values.texture.chance > 0 && (values.texture.grain !== 'off' || values.texture.cdSkips))));
   let invalidPlan = false;
-  try { inferenceSettings(values.inference); masteringSettings(values.mastering); } catch { invalidPlan = true; }
+  try { musicModel(values.model); inferenceSettings(values.inference); masteringSettings(values.mastering); } catch { invalidPlan = true; }
+  if (!availableModels.some(model => model.id === values.model && model.available)) invalidPlan = true;
   if (values.generationMode !== 'single') {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }
   }

@@ -1,5 +1,17 @@
 // UI text only. User prompts, track titles and model output are never translated.
 export const strings = {
+  musicModel: ["Modèle musical", "Music model"],
+  modelTurbo: ["Turbo standard", "Standard Turbo"],
+  modelXlTurbo: ["XL Turbo", "XL Turbo"],
+  modelsChecking: ["Recherche des modèles installés…", "Checking installed models…"],
+  modelTurboHint: ["Modèle standard à 8 étapes, pour les essais rapides.", "Standard 8-step model for quick experiments."],
+  modelXlHint: ["Modèle XL à 8 étapes, pour tester un rendu plus détaillé. La génération peut être plus lente.", "XL 8-step model to try more detailed audio. Generation may take longer."],
+  modelFirstLoad: ["Le modèle sera chargé au lancement du morceau. Le premier envoi peut prendre jusqu’à deux minutes.", "The model will load when you generate a track. The first submission may take up to two minutes."],
+  errorMusicModel: ["Choisis Turbo standard ou XL Turbo.", "Choose Standard Turbo or XL Turbo."],
+  errorModelInventory: ["Impossible de lire les modèles installés dans ACE-Step. Vérifie la connexion au moteur.", "Could not read installed ACE-Step models. Check the engine connection."],
+  errorModelUnavailable: ["Le modèle {model} n’est pas installé dans le moteur connecté. Télécharge-le, puis vérifie la connexion.", "Model {model} is not installed in the connected engine. Download it, then check the connection again."],
+  errorModelBusy: ["ACE-Step travaille encore. Attends la fin de sa file avant de changer de modèle.", "ACE-Step is still working. Wait for its queue to finish before switching models."],
+  errorModelLoad: ["Le chargement du modèle {model} n’a pas été confirmé. Consulte le journal ACE-Step avant de réessayer.", "Loading model {model} was not confirmed. Check the ACE-Step log before retrying."],
   lmTemperature: ["Température LM", "LM temperature"],
   stableTitle: ["Ambiance stable", "Stable ambience"],
   stableHint: ["Planification à 0,7 · arrangement sobre · pistes de 2 min · volume harmonisé. Ton prompt et tes BPM sont conservés.", "Planning at 0.7 · restrained arrangement · 2-minute tracks · matched loudness. Your prompt and BPM settings are kept."],

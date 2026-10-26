@@ -15,6 +15,8 @@ import { inferenceSettings, arrangementPrompt } from './public/inference-setting
 import { masteringSettings, hasMastering } from './public/mastering.js';
 import { createSessionExporter } from './session-export.mjs';
 import { safeFileStem, sessionTrackTitle, sessionTrackFilename } from './public/session-names.js';
+import { musicModel } from './public/music-models.js';
+import { engineModels, prepareMusicModel } from './engine-models.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -47,7 +49,7 @@ export function generationInput(input) {
   if (!['wav', 'flac', 'mp3'].includes(input.format)) throw new UserError('errorFormat');
   return {
     title, duration, bpm, seed, thinking: input.thinking, format: input.format,
-    prompt, inference: inferenceSettings(input.inference), mastering: masteringSettings(input.mastering), model: 'acestep-v15-turbo', background: backgroundNoise(input.background), ending: endingSettings(input.ending),
+    prompt, inference: inferenceSettings(input.inference), mastering: masteringSettings(input.mastering), model: musicModel(input.model), background: backgroundNoise(input.background), ending: endingSettings(input.ending),
   };
 }
 
@@ -195,6 +197,7 @@ export function createStudio({
     try { return await operation; } finally { active.delete(track.id); }
   }
   async function submitTrack(input, extra = {}) {
+    await prepareMusicModel(engine, input.model);
     const payload = enginePayload(input);
     const accepted = await engine('/release_task', payload);
     if (!accepted.task_id) throw new UserError('errorTaskId', 502);
@@ -222,6 +225,7 @@ export function createStudio({
         return respond(res, 200, { online: true, health });
       }
       if (req.method === 'GET' && url.pathname === '/api/tracks') return respond(res, 200, tracks.map(publicTrack));
+      if (req.method === 'GET' && url.pathname === '/api/models') return respond(res, 200, { models: await engineModels(engine) });
       if (req.method === 'GET' && url.pathname === '/api/sessions') return respond(res, 200, { sessions: publicSessions(), canMix });
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
         const body = await jsonBody(req);
@@ -321,7 +325,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/inference-settings.js': ['inference-settings.js', '.js'], '/mastering.js': ['mastering.js', '.js'], '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/music-models.js': ['music-models.js', '.js'], '/inference-settings.js': ['inference-settings.js', '.js'], '/mastering.js': ['mastering.js', '.js'], '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
