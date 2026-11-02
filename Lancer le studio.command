@@ -26,7 +26,8 @@ if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modu
   fi
 fi
 echo "Garde cette fenêtre ouverte pendant l’utilisation du studio."
-echo "L’API ACE-Step doit être lancée séparément sur le port 8001."
+echo "Musique : lance l’API ACE-Step séparément sur le port 8001."
+echo "Ambiances : Stable Audio est lancé à la demande depuis l’onglet dédié."
 (sleep 1; open "http://127.0.0.1:3210") &
 "$STUDIO_NODE" server.mjs
 read -r -p "Appuie sur Entrée pour fermer."

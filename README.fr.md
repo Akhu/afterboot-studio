@@ -1,16 +1,18 @@
 # Afterboot Studio
 
+Depuis la version 0.11, l’onglet **Ambiances** utilise aussi **Stable Audio 3 en local** : nappes musicales avec Small-Music, textures sonores avec Small-SFX, et souffle réglé séparément. Double-clique sur `Installer les ambiances.command` ou lance `npm run setup:ambiences`, puis accepte les conditions des modèles sur Hugging Face et connecte ton compte. [Installation et fonctionnement](docs/ambiences.md).
+
 [English](README.md) · [Français](README.fr.md)
 
 Un studio musical rétro pour l'[API officielle ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5). Crée des instrumentaux, garde les seeds sous les yeux et retrouve tes morceaux dans une bibliothèque locale.
 
-Interface communautaire indépendante. ACE-Step fonctionne séparément et assure toute la génération musicale. Aucun modèle n'est inclus.
+Interface communautaire indépendante. ACE-Step fonctionne séparément pour le compositeur ; l’onglet Ambiances lance Stable Audio localement à la demande. Aucun poids de modèle n’est inclus.
 
 ![Afterboot Studio en français](docs/screenshots/fr.jpg)
 
 ## État du projet
 
-La version 0.10.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.11.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
 
 ## Fonctionnalités
 
@@ -35,7 +37,8 @@ La seed seule ne garantit pas une reproduction identique entre versions de modè
 ## Prérequis
 
 - Node.js 20 ou plus récent.
-- Une API REST ACE-Step 1.5 installée et fonctionnelle avec le modèle Turbo.
+- Pour le compositeur musical : une API REST ACE-Step 1.5 installée et fonctionnelle avec le modèle Turbo.
+- Pour les ambiances : l’installation Python Stable Audio et l’accès aux poids Hugging Face. ACE-Step peut rester arrêté.
 - Un navigateur récent.
 
 Lance `npm ci --ignore-scripts` pour installer la bibliothèque ZIP du studio et ses dépendances de développement. ACE-Step conserve ses propres dépendances et téléchargements de modèles. Commence par son [guide d'installation](https://github.com/ace-step/ACE-Step-1.5#readme).

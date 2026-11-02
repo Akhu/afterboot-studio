@@ -1,16 +1,18 @@
 # Afterboot Studio
 
+Version 0.11 adds a local **Ambiences** workspace using **Stable Audio 3**: Small-Music for musical pads, Small-SFX for sound textures, and separate hiss controls. Run `npm run setup:ambiences` or double-click `Installer les ambiances.command`, then accept the Hugging Face model agreements and sign in. [Setup and behavior](docs/ambiences.md).
+
 [English](README.md) · [Français](README.fr.md)
 
 A retro music workstation for the [official ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) API. Create instrumentals, keep your seeds in view, and collect your tracks in a local library.
 
-Independent community UI. ACE-Step runs separately and provides all music generation. No model weights are bundled.
+Independent community UI. ACE-Step runs separately for the composer; the Ambiences workspace starts Stable Audio locally on demand. No model weights are bundled.
 
 ![Afterboot Studio in English](docs/screenshots/en.jpg)
 
 ## Preview status
 
-Version 0.10.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.11.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
 
 ## What you can do
 
@@ -35,7 +37,8 @@ A seed alone does not guarantee identical audio across different model versions,
 ## Requirements
 
 - Node.js 20 or newer.
-- An installed and working ACE-Step 1.5 REST API with the Turbo model.
+- For the music composer: an installed and working ACE-Step 1.5 REST API with the Turbo model.
+- For ambiences: the Stable Audio Python environment and Hugging Face model access. ACE-Step can remain stopped.
 - A modern browser.
 
 Run `npm ci --ignore-scripts` to install the studio's ZIP library and development dependencies. ACE-Step has its own installation requirements and model downloads. Follow its [installation guide](https://github.com/ace-step/ACE-Step-1.5#readme) first.

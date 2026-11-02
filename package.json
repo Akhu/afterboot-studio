@@ -1,6 +1,6 @@
 {
   "name": "afterboot-studio",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A bilingual retro music studio for the official ACE-Step 1.5 API",
   "license": "MIT",
   "repository": {
@@ -15,7 +15,8 @@
   "scripts": {
     "start": "node server.mjs",
     "start:lan": "node server.mjs --lan",
-    "test": "node --test"
+    "test": "node --test",
+    "setup:ambiences": "bash scripts/setup-ambiences.sh"
   },
   "dependencies": {
     "yazl": "3.3.1"

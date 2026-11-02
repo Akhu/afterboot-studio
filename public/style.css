@@ -87,6 +87,21 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -1px; font-we
 .model-tag strong { font: 10px var(--mono); letter-spacing: 3px; }
 .small-signal { font: 19px var(--mono); letter-spacing: -4px; color: #b1d864; }
 .creation-grid { display: grid; grid-template-columns: minmax(0, 1fr) 278px; gap: 16px; align-items: stretch; }
+.ambience-engine-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 17px; background: #e9e7de; box-shadow: var(--sunken); }
+.ambience-health { font: 10px/1.6 var(--mono); color: #78582e; }
+.ambience-health.available { color: #34552b; }
+.ambience-engine-bar button { padding: 8px 12px; flex-shrink: 0; font-size: 10px; }
+.ambience-title-label { margin-top: 19px; }
+#ambience-title { width: 100%; margin-top: 7px; }
+#ambience-prompt-count { font: 8px var(--mono); color: #5e6971; white-space: nowrap; }
+.ambience-noise { margin-top: 22px !important; background: #e8e9df; }
+.ambience-noise input[type=range] { width: 100%; margin-top: 10px; padding: 0; box-shadow: none; accent-color: #426f79; }
+#ambience-noise-level { font: 10px var(--mono); }
+.ambience-install { padding: 0 16px 12px; margin-top: 18px; border: 1px solid #9d9f98; background: #e8e6dc; }
+.ambience-install p { font-size: 11px; line-height: 1.7; max-width: 740px; }
+.ambience-install pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #fffef9; padding: 12px; box-shadow: var(--sunken); }
+.ambience-model-links { display: flex; flex-wrap: wrap; gap: 18px; font-size: 11px; color: #163c7c; text-decoration: underline; }
+@media (max-width: 620px) { .ambience-engine-bar { align-items: stretch; flex-direction: column; } }
 .panel { min-width: 0; background: #dfddd6; box-shadow: var(--raised); padding: 3px 15px 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -12px 17px; padding: 6px 8px; background: #becbd2; border-bottom: 1px solid #929c9d; box-shadow: 0 1px #fafafa; min-height: 31px; }
 .panel-heading h2 { display: flex; align-items: center; gap: 7px; font-size: 11px; margin: 0; font-weight: bold; }

@@ -6,6 +6,7 @@ import { hasMastering, masteringSettings } from '/mastering.js';
 import { hasEnding } from '/ending.js';
 import { completedSessionTracks, sessionTrackTitle } from '/session-names.js';
 import { musicModel } from '/music-models.js';
+import { createAmbienceWorkspace } from '/ambiences.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -31,6 +32,7 @@ let sessions = [], canMix = false, sessionRefresh = false;
 let availableModels = [];
 const exportingSessions = new Set();
 const polling = new Map();
+let ambience;
 
 function node(tag, className, text) {
   const item = document.createElement(tag);
@@ -183,13 +185,16 @@ function setForm(input) {
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
 function restore(track, variation) {
   const returnedSeed = Number(seedOf(track).split(',')[0]);
-  setForm({
+  const restored = {
     ...track.input, mastering: track.texture?.mastering || track.input.mastering, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: (track.displayTitle || track.input.title) + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
-  });
-  location.hash = 'create';
-  $('track-title').focus();
+  };
+  if (track.input.engine === 'stable-audio-3') {
+    ambience.restore(restored); location.hash = 'ambiences'; $('ambience-title').focus();
+  } else {
+    setForm(restored); location.hash = 'create'; $('track-title').focus();
+  }
   toast(t(variation ? 'restoreVariation' : 'restoreSettings'));
 }
 function action(label, handler, className = '') {
@@ -221,7 +226,8 @@ function audioCard(track) {
   const info = node('div', 'track-info');
   info.append(node('h3', '', title));
   const meta = node('div', 'track-meta');
-  meta.append(node('span', '', track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
+  const isAmbience = track.input.engine === 'stable-audio-3';
+  meta.append(node('span', '', isAmbience ? t(track.input.mode === 'sfx' ? 'ambienceSfx' : 'ambienceMusic') : track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
   if (track.texture) meta.append(node('span', '', textureDescription(track.texture)));
   const seedKey = (track.returnedSeed === null || track.returnedSeed === undefined) ? 'seedRequested' : 'seedReturned';
   meta.append(node('span', '', t(seedKey, { seed: seedOf(track) })));
@@ -281,7 +287,7 @@ function audioCard(track) {
   const details = node('details', 'track-details');
   details.append(node('summary', '', t('promptDetails')));
   details.append(node('p', '', track.input.prompt));
-  details.append(node('code', '', track.input.model + ' · ' + t(track.input.thinking ? 'planningOn' : 'planningOff') + ' · ' + t('seedRequested', { seed: track.input.seed })));
+  details.append(node('code', '', (isAmbience ? 'Stable Audio 3 · ' + track.input.model : track.input.model + ' · ' + t(track.input.thinking ? 'planningOn' : 'planningOff')) + ' · ' + t('seedRequested', { seed: track.input.seed })));
   if (track.pollError) details.append(node('p', 'track-error', errorMessage(track.pollError)));
   card.append(details);
   return card;
@@ -307,8 +313,9 @@ function renderLibrary() {
 }
 function render() {
   $('nav-count').textContent = tracks.length;
-  fillList('recent-tracks', tracks.slice(0, 3));
+  fillList('recent-tracks', tracks.filter(track => track.input.engine !== 'stable-audio-3').slice(0, 3));
   renderLibrary();
+  ambience?.render(tracks);
   updateActivity();
 }
 function sessionIsOpen(session) { return !['complete', 'stopped'].includes(session.status); }
@@ -402,7 +409,7 @@ async function refreshSessions() {
   } finally { sessionRefresh = false; }
 }
 function updateActivity() {
-  const pending = tracks.find(track => polling.has(track.id));
+  const pending = tracks.find(track => polling.has(track.id) || (track.input.engine === 'stable-audio-3' && track.status === 'pending'));
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
   const values = formValues();
@@ -414,13 +421,14 @@ function updateActivity() {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }
   }
   $('generate').disabled = busy || openSession || invalidPlan || (needsFfmpeg && !canMix);
+  ambience?.update();
   if (busy || openSession) $('generate').textContent = t(openSession ? 'sessionInProgress' : submitting ? 'sending' : 'generating');
   else {
     const icon = node('span', '', '▶');
     icon.setAttribute('aria-hidden', 'true');
     $('generate').replaceChildren(icon, document.createTextNode(' ' + t($('generation-mode').value === 'single' ? 'generate' : 'startSession')));
   }
-  $('activity').hidden = !busy;
+  $('activity').hidden = !busy || pending?.input.engine === 'stable-audio-3';
   if (pending) {
     const seconds = Math.max(0, Math.floor((Date.now() - new Date(pending.createdAt).getTime()) / 1000));
     $('elapsed').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
@@ -440,6 +448,7 @@ async function startPolling(id) {
         const updated = await api('/api/tracks/' + id + '/refresh', {});
         errors = 0;
         tracks = tracks.map(track => track.id === id ? updated : track);
+        if (updated.input.engine === 'stable-audio-3' && updated.status === 'pending') ambience.render(tracks);
         if (updated.status !== 'pending') {
           render();
           toast(updated.status === 'ready' ? t('trackReady') : trackError(updated), updated.status === 'failed');
@@ -459,15 +468,16 @@ async function startPolling(id) {
   } finally { polling.delete(id); updateActivity(); }
 }
 function route() {
-  const selected = location.hash === '#library' ? 'library' : 'create';
+  const selected = ['#library', '#ambiences'].includes(location.hash) ? location.hash.slice(1) : 'create';
   document.querySelectorAll('.view').forEach(view => { view.hidden = view.id !== selected; });
   document.querySelectorAll('[data-nav]').forEach(link => {
     link.classList.toggle('active', link.dataset.nav === selected);
     if (link.dataset.nav === selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-  $('breadcrumb').textContent = t(selected === 'library' ? 'breadcrumbLibrary' : 'breadcrumbCreate');
-  $('window-document').textContent = t(selected === 'library' ? 'windowLibrary' : 'windowCreate');
+  $('breadcrumb').textContent = t(selected === 'ambiences' ? 'ambiences' : selected === 'library' ? 'breadcrumbLibrary' : 'breadcrumbCreate');
+  $('window-document').textContent = t(selected === 'ambiences' ? 'windowAmbiences' : selected === 'library' ? 'windowLibrary' : 'windowCreate');
+  $('current-engine').textContent = selected === 'ambiences' ? 'Stable Audio 3' : 'ACE-Step 1.5';
   document.querySelectorAll('audio').forEach(audio => { if (audio.closest('.view').hidden) audio.pause(); });
 }
 $('apply-stable').addEventListener('click', () => {
@@ -551,11 +561,17 @@ $('language').addEventListener('change', () => {
   try { localStorage.setItem('afterboot-language-v1', language); } catch {}
   applyLanguage();
 });
+ambience = createAmbienceWorkspace({
+  api, t, fillList, toast, reportError: error => toast(errorMessage(error), true),
+  isBusy: () => submitting || tracks.some(track => track.status === 'pending') || sessions.some(sessionIsOpen),
+  onTrack: track => { tracks.unshift(track); render(); startPolling(track.id); },
+});
 let draft;
 try { draft = JSON.parse(localStorage.getItem('afterboot-draft-v1')); } catch {}
 setForm(draft || { prompt: presets.jungle.prompt });
 applyLanguage();
 health();
+ambience.health();
 try {
   tracks = await api('/api/tracks');
   render();
@@ -564,4 +580,5 @@ try {
 try { await refreshSessions(); } catch (error) { toast(errorMessage(error), true); }
 setInterval(() => { refreshSessions().catch(() => {}); }, 3000);
 setInterval(health, 30000);
+setInterval(() => ambience.health(), 30000);
 setInterval(updateActivity, 1000);

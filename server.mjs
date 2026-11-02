@@ -17,6 +17,7 @@ import { createSessionExporter } from './session-export.mjs';
 import { safeFileStem, sessionTrackTitle, sessionTrackFilename } from './public/session-names.js';
 import { musicModel } from './public/music-models.js';
 import { engineModels, prepareMusicModel } from './engine-models.mjs';
+import { createAmbienceEngine } from './ambience-engine.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
@@ -53,6 +54,24 @@ export function generationInput(input) {
   };
 }
 
+export function ambienceInput(input) {
+  const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
+  if (!prompt || prompt.length > 6000) throw new UserError('errorPrompt');
+  if (!['music', 'sfx'].includes(input.mode)) throw new UserError('errorAmbienceOptions');
+  if (!Number.isInteger(input.duration) || input.duration < 5 || input.duration > 120) throw new UserError('errorAmbienceOptions');
+  if (typeof input.randomSeed !== 'boolean') throw new UserError('errorOptions');
+  const seed = input.randomSeed ? randomInt(0, 2147483647) : input.seed;
+  if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) throw new UserError('errorSeed');
+  const ending = endingSettings(input.ending);
+  if (ending.seconds > input.duration) throw new UserError('errorAmbienceOptions');
+  return {
+    engine: 'stable-audio-3', mode: input.mode, model: input.mode === 'music' ? 'small-music' : 'small-sfx',
+    title: String(input.title || 'Sans titre').trim().slice(0, 100) || 'Sans titre',
+    prompt, duration: input.duration, seed, randomSeed: input.randomSeed, format: 'wav',
+    background: backgroundNoise(input.background), ending,
+  };
+}
+
 function enginePayload(input) {
   const inference = inferenceSettings(input.inference);
   return {
@@ -86,6 +105,7 @@ export function createStudio({
   textureRenderer = renderTexture,
   mp3Encoder,
   canMix = ffmpegAvailable(),
+  ambienceEngine = createAmbienceEngine(),
 } = {}) {
   const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
   if (lan) {
@@ -101,11 +121,21 @@ export function createStudio({
   const statePath = join(dataDir, 'library.json');
   let tracks = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : [];
   if (!Array.isArray(tracks)) throw new Error('Bibliothèque illisible. Le fichier a été conservé.');
+  // Python jobs belong to this server process. Never resubmit them on restart.
+  let interrupted = false;
+  for (const track of tracks) {
+    if (track.input.engine === 'stable-audio-3' && track.status === 'pending' && !track.audioFile) {
+      Object.assign(track, { status: 'failed', errorCode: 'errorAmbienceInterrupted', errorParams: {} });
+      interrupted = true;
+    }
+  }
   const active = new Map();
+  const ambienceRunning = new Set();
   function save() {
     writeFileSync(`${statePath}.tmp`, JSON.stringify(tracks, null, 2));
     renameSync(`${statePath}.tmp`, statePath);
   }
+  if (interrupted) save();
   function respond(res, status, data) {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(data));
@@ -146,16 +176,18 @@ export function createStudio({
         await processTrack(track, { grain: 'off', events: [], noiseSeed: track.input.seed, background: track.input.background, ending: track.input.ending, mastering: track.input.mastering });
       } catch (error) { throw new UserError(hasMastering(track.input.mastering) ? 'errorMasteringRender' : hasEnding(track.input.ending) ? 'errorEndingRender' : 'errorBackgroundRender', 502); }
     }
-    Object.assign(track, { status: 'ready', completedAt: new Date().toISOString() });
+    Object.assign(track, { status: 'ready', completedAt: new Date().toISOString(), phase: undefined, errorCode: undefined, errorParams: undefined });
     save();
     return track;
   }
   async function syncTrack(track) {
     if (track.status !== 'pending') return track;
+    if (ambienceRunning.has(track.id)) return track;
     if (active.has(track.id)) return active.get(track.id);
     const operation = (async () => {
       // A failed background render retries the archived audio, never the model.
       if (track.audioFile) return finishDownloadedTrack(track);
+      if (track.input.engine === 'stable-audio-3') return track;
       const jobs = await engine('/query_result', { task_id_list: [track.taskId] });
       if (!Array.isArray(jobs)) throw new UserError('errorJobResponse', 502);
       const job = jobs.find(value => value.task_id === track.taskId);
@@ -205,6 +237,27 @@ export function createStudio({
     tracks.unshift(track); save();
     return track;
   }
+  function submitAmbience(input) {
+    const track = { id: randomUUID(), input, generationPrompt: input.prompt, createdAt: new Date().toISOString(), status: 'pending', phase: 'loading', favorite: false };
+    tracks.unshift(track); save();
+    const audioFile = `${track.id}.wav`;
+    ambienceRunning.add(track.id);
+    ambienceEngine.generate(input, join(dataDir, 'audio', audioFile), phase => {
+      if (['loading', 'generating'].includes(phase)) { track.phase = phase; save(); }
+    }).then(async result => {
+      if (!existsSync(join(dataDir, 'audio', audioFile)) || !statSync(join(dataDir, 'audio', audioFile)).size) throw new UserError('errorEmptyAudio', 502);
+      Object.assign(track, { audioFile, returnedSeed: result.seed, engineResult: { sampleRate: result.sampleRate }, phase: 'processing' });
+      save();
+      await finishDownloadedTrack(track);
+    }).catch(error => {
+      Object.assign(track, {
+        status: track.audioFile ? 'pending' : 'failed', phase: track.audioFile ? 'processing' : undefined,
+        errorCode: error.code || 'errorAmbienceGeneration', errorParams: error.params || {},
+      });
+      save();
+    }).finally(() => ambienceRunning.delete(track.id));
+    return track;
+  }
   let generationSubmitting = false, finishing = false;
   async function processTrack(track, texture, signal) {
     Object.assign(track, await textureRenderer(track, texture, dataDir, signal));
@@ -224,12 +277,25 @@ export function createStudio({
         const health = await engine('/health', null, 5000);
         return respond(res, 200, { online: true, health });
       }
+      if (req.method === 'GET' && url.pathname === '/api/ambiences/health') {
+        return respond(res, 200, { ...await ambienceEngine.health(), canMix, models: ['small-music', 'small-sfx'] });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/ambiences/generate') {
+        const input = ambienceInput(await jsonBody(req));
+        if ((hasBackground(input.background) || hasEnding(input.ending)) && !canMix) throw new UserError('errorFfmpeg');
+        if (sessions.busy() || generationSubmitting || finishing || tracks.some(track => track.status === 'pending')) throw new UserError('errorSessionBusy', 409);
+        generationSubmitting = true;
+        try {
+          if (!(await ambienceEngine.health()).available) throw new UserError('errorAmbienceMissing', 503);
+          return respond(res, 202, publicTrack(submitAmbience(input)));
+        } finally { generationSubmitting = false; }
+      }
       if (req.method === 'GET' && url.pathname === '/api/tracks') return respond(res, 200, tracks.map(publicTrack));
       if (req.method === 'GET' && url.pathname === '/api/models') return respond(res, 200, { models: await engineModels(engine) });
       if (req.method === 'GET' && url.pathname === '/api/sessions') return respond(res, 200, { sessions: publicSessions(), canMix });
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
         const body = await jsonBody(req);
-        if (generationSubmitting || finishing) throw new UserError('errorSessionBusy', 409);
+        if (generationSubmitting || finishing || tracks.some(track => track.input.engine === 'stable-audio-3' && track.status === 'pending')) throw new UserError('errorSessionBusy', 409);
         const plan = sessionPlan(body);
         const input = generationInput({ ...body.input, background: { type: 'off' }, ending: { seconds: 0 }, mastering: plan.mastering, bpm: plan.tempo.enabled ? plan.tempo.min : body.input?.bpm });
         return respond(res, 202, sessions.start(input, plan));
@@ -263,7 +329,7 @@ export function createStudio({
       if (req.method === 'POST' && url.pathname === '/api/generate') {
         const input = generationInput(await jsonBody(req));
         if ((hasBackground(input.background) || hasEnding(input.ending) || hasMastering(input.mastering)) && !canMix) throw new UserError('errorFfmpeg');
-        if (sessions.busy() || generationSubmitting || finishing) throw new UserError('errorSessionBusy', 409);
+        if (sessions.busy() || generationSubmitting || finishing || tracks.some(track => track.input.engine === 'stable-audio-3' && track.status === 'pending')) throw new UserError('errorSessionBusy', 409);
         generationSubmitting = true;
         try { return respond(res, 202, publicTrack(await submitTrack(input))); }
         finally { generationSubmitting = false; }
@@ -325,7 +391,7 @@ export function createStudio({
           return createReadStream(path).on('error', () => res.destroy()).pipe(res);
         }
       }
-      const staticFiles = { '/music-models.js': ['music-models.js', '.js'], '/inference-settings.js': ['inference-settings.js', '.js'], '/mastering.js': ['mastering.js', '.js'], '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
+      const staticFiles = { '/ambiences.js': ['ambiences.js', '.js'], '/music-models.js': ['music-models.js', '.js'], '/inference-settings.js': ['inference-settings.js', '.js'], '/mastering.js': ['mastering.js', '.js'], '/': ['index.html', '.html'], '/app.js': ['app.js', '.js'], '/background-noise.js': ['background-noise.js', '.js'], '/ending.js': ['ending.js', '.js'], '/session-names.js': ['session-names.js', '.js'], '/session-plan.js': ['session-plan.js', '.js'], '/i18n.js': ['i18n.js', '.js'], '/style.css': ['style.css', '.css'] };
       if (req.method === 'GET' && staticFiles[url.pathname]) {
         const [file, extension] = staticFiles[url.pathname];
         res.writeHead(200, { 'Content-Type': mime[extension], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
@@ -342,7 +408,7 @@ export function createStudio({
       if (!error.status) console.error(error);
     }
   });
-  server.on('close', () => { sessions.close(); exporter.close(); });
+  server.on('close', () => { sessions.close(); exporter.close(); ambienceEngine.close(); });
   return server;
 }
 
