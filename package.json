@@ -1,7 +1,7 @@
 {
   "name": "afterboot-studio",
-  "version": "0.11.0",
-  "description": "A bilingual retro music studio for the official ACE-Step 1.5 API",
+  "version": "0.12.0",
+  "description": "A bilingual retro studio for ACE-Step and local Stable Audio 3 / MLX",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -1,18 +1,34 @@
 # Afterboot Studio
 
-Depuis la version 0.11, l’onglet **Ambiances** utilise aussi **Stable Audio 3 en local** : nappes musicales avec Small-Music, textures sonores avec Small-SFX, et souffle réglé séparément. Double-clique sur `Installer les ambiances.command` ou lance `npm run setup:ambiences`, puis accepte les conditions des modèles sur Hugging Face et connecte ton compte. [Installation et fonctionnement](docs/ambiences.md).
-
 [English](README.md) · [Français](README.fr.md)
 
-Un studio musical rétro pour l'[API officielle ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5). Crée des instrumentaux, garde les seeds sous les yeux et retrouve tes morceaux dans une bibliothèque locale.
+Un studio musical rétro pour l'[API officielle ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) et [Stable Audio 3 en local via MLX](https://github.com/Stability-AI/stable-audio-3/tree/main/optimized/mlx). Crée des instrumentaux, des nappes et des textures sonores, puis garde tes prises et tes albums dans une bibliothèque commune.
 
-Interface communautaire indépendante. ACE-Step fonctionne séparément pour le compositeur ; l’onglet Ambiances lance Stable Audio localement à la demande. Aucun poids de modèle n’est inclus.
+Interface communautaire indépendante. ACE-Step fonctionne séparément ; Stable Audio 3 utilise un environnement Python isolé dans le projet. Aucun poids de modèle n'est inclus dans le dépôt.
 
 ![Afterboot Studio en français](docs/screenshots/fr.jpg)
 
 ## État du projet
 
-La version 0.11.0 est une préversion. La génération d'un morceau a été signalée comme fonctionnelle sur Apple Silicon. Les sessions longues sont testées avec une API simulée, et l'assemblage ainsi que la durée de sortie sont vérifiés avec FFmpeg. La génération d'une session longue avec une installation réelle d'ACE-Step reste à valider. Les performances dépendent du moteur, des modèles et du matériel.
+La version 0.12.0 est une préversion. Les prises Stable Audio 3 / MLX ont été validées réellement sur un MacBook Pro M5 Max. Les tests automatisés utilisent aussi des moteurs simulés et le vrai FFmpeg pour les contrats HTTP, les fondus, les exports et la reprise. Voir le [rapport de validation des albums](docs/ambience-albums-validation.md) pour les essais réels et leurs limites. La génération d'une session longue sur une installation réelle d'ACE-Step reste une validation distincte.
+
+## Stable Audio 3 / MLX et albums d’ambiances
+
+![Ambiances locales sur Apple Silicon](docs/screenshots/ambiences-fr.png)
+
+Sur un Mac Apple Silicon, double-clique sur **Installer les ambiances.command**, ou lance `npm run setup:ambiences`. Le lanceur installe les sources officielles et les dépendances verrouillées dans un environnement Python isolé, télécharge les poids et valide MLX avec deux générations réelles. Lance ensuite le studio habituel et ouvre **Ambiances**. L’API ACE-Step doit rester accessible pour vérifier que sa file est au repos.
+
+**Nappes musicales** utilise Small-Music pour des drones et nappes sans batterie. **Textures sonores** utilise Small-SFX pour du souffle, du vent et des grondements. Prompt libre, exemples par mode, durée de 5 à 120 secondes, seed fixe ou aléatoire. Le souffle séparé et le fondu facultatif sont appliqués par FFmpeg sur une copie WAV ; l’original reste disponible.
+
+![Album d’ambiances et mix bouclé](docs/screenshots/ambience-album-fr.png)
+
+Choisis **Un album**, son nom, le nombre de morceaux de 1 à 100 et deux bornes de durée entre 5 et 120 secondes. Une durée entière aléatoire est enregistrée pour chaque piste avant le premier lancement. Les titres prennent le nom de l’essai suivi d’un numéro, par exemple **Brumes nocturnes - 01**. Pause, reprise et rechargement conservent le plan et les seeds. Les albums restent accessibles dans Ambiances et dans la bibliothèque.
+
+Le bouton **Album ZIP** exporte les morceaux finalisés en MP3 320 kbit/s, nommés et numérotés avec leurs tags d’album, comme pour ACE-Step. Les WAV et leurs originaux restent téléchargeables individuellement. Un export partiel est possible pendant une pause ou après un arrêt.
+
+Active **Créer aussi un mix bouclé avec fondus** pour obtenir, par exemple, deux heures à partir de 15 morceaux. La durée cible va de 1 à 240 minutes. Chaque passage mélange les pistes ; avec au moins trois morceaux, le raccord entre deux passages évite de répéter la même piste. Le mix réutilise les originaux, ajoute le souffle en continu et applique le fondu final une seule fois. Il se télécharge en WAV séparément du ZIP. Aucun nouveau morceau n’est généré pour les répétitions.
+
+[Installation et connexion Hugging Face](docs/ambiences.md). Si un jeton est nécessaire, saisis-le uniquement dans le terminal local, jamais dans un chat. [Validation et checklist manuelle des albums](docs/ambience-albums-validation.md).
 
 ## Fonctionnalités
 
@@ -37,8 +53,7 @@ La seed seule ne garantit pas une reproduction identique entre versions de modè
 ## Prérequis
 
 - Node.js 20 ou plus récent.
-- Pour le compositeur musical : une API REST ACE-Step 1.5 installée et fonctionnelle avec le modèle Turbo.
-- Pour les ambiances : l’installation Python Stable Audio et l’accès aux poids Hugging Face. ACE-Step peut rester arrêté.
+- Une API REST ACE-Step 1.5 installée et fonctionnelle avec le modèle Turbo.
 - Un navigateur récent.
 
 Lance `npm ci --ignore-scripts` pour installer la bibliothèque ZIP du studio et ses dépendances de développement. ACE-Step conserve ses propres dépendances et téléchargements de modèles. Commence par son [guide d'installation](https://github.com/ace-step/ACE-Step-1.5#readme).
@@ -198,7 +213,7 @@ Le dossier `.data/`, à côté du serveur, contient l'audio et les métadonnées
 
 Le studio copie les morceaux terminés depuis ACE-Step vers sa bibliothèque. Les anciens résultats Gradio ne sont pas importés automatiquement. Un suivi mis en pause n'annule pas la génération sur le moteur. Utilise « Vérifier l'état » pour le reprendre. Avant leur copie, les résultats restent soumis à la politique de cache du moteur.
 
-Cette préversion couvre la création d'instrumentaux à partir de texte et l'assemblage de sessions. Remix, repaint et entraînement LoRA ne sont pas inclus. Le backend LM est MLX sur macOS et PyTorch ailleurs.
+Cette préversion couvre les instrumentaux ACE-Step, les ambiances Stable Audio 3, les albums et leurs mix bouclés. Remix, repaint et entraînement LoRA ne sont pas inclus. Le backend LM est MLX sur macOS et PyTorch ailleurs.
 
 ## Développement
 

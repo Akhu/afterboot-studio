@@ -1,66 +1,53 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = dirname(fileURLToPath(import.meta.url));
-const failure = code => Object.assign(new Error(code), { code, status: 503, params: {} });
+const root = fileURLToPath(new URL('.', import.meta.url));
+export const ambienceRevision = '790793b89ddceea612be9ce42ff6830d18f6fa57';
+const python = join(root, '.venv-ambiences/bin/python');
+const script = join(root, '.stable-audio-src/optimized/mlx/scripts/sa3_mlx.py');
+const validation = join(root, '.data/ambience-validation.json');
+export function ambienceStatus() {
+  let validated = false;
+  try {
+    const value = JSON.parse(readFileSync(validation, 'utf8'));
+    validated = value.revision === ambienceRevision && value.backend === 'mlx' && value.models?.includes('small-music') && value.models?.includes('small-sfx');
+  } catch {}
+  return { installed: existsSync(python) && existsSync(script), validated, backend: 'mlx', revision: ambienceRevision };
+}
+function failure(code) { return Object.assign(new Error(code), { code, status: 503 }); }
 
-// A separate process keeps the Python environment isolated and releases model RAM
-// after each take. Only the studio chooses the script and output path.
-export function createAmbienceEngine({ python = process.env.STABLE_AUDIO_PYTHON || join(root, '.stable-audio', '.venv', 'bin', 'python') } = {}) {
-  const children = new Set();
-  const script = join(root, 'scripts', 'stable_audio_worker.py');
-  function invoke(args, input, onProgress, timeout) {
-    return new Promise((resolve, reject) => {
-      const child = spawn(python, [script, ...args], {
-        cwd: root, env: { ...process.env, PYTHONUNBUFFERED: '1', PYTORCH_ENABLE_MPS_FALLBACK: '1' },
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      children.add(child);
-      let pending = '', result, errorCode, expired = false, settled = false;
-      const timer = setTimeout(() => { expired = true; child.kill('SIGKILL'); }, timeout);
-      function finish(error, value) {
-        if (settled) return;
-        settled = true; clearTimeout(timer); children.delete(child);
-        error ? reject(error) : resolve(value);
-      }
-      child.on('error', () => finish(failure('errorAmbienceMissing')));
-      child.stdin.on('error', () => {});
-      child.stderr.on('data', () => {}); // Model progress and dependency logs are not protocol messages.
-      child.stdout.setEncoding('utf8');
-      child.stdout.on('data', chunk => {
-        pending += chunk;
-        if (pending.length > 65536) { child.kill('SIGKILL'); return; }
-        let end;
-        while ((end = pending.indexOf('\n')) >= 0) {
-          const line = pending.slice(0, end); pending = pending.slice(end + 1);
-          try {
-            const message = JSON.parse(line);
-            if (message.type === 'progress') onProgress?.(message.phase);
-            else if (message.type === 'result') result = message;
-            else if (message.type === 'error') errorCode = message.code;
-          } catch { /* Ignore non-protocol output from third-party libraries. */ }
-        }
-      });
-      child.on('close', code => {
-        if (expired) return finish(failure('errorAmbienceTimeout'));
-        if (code === 0 && result) return finish(null, result);
-        const known = ['errorAmbienceAccess', 'errorAmbienceMissing', 'errorAmbienceMemory', 'errorAmbienceGeneration'];
-        finish(failure(known.includes(errorCode) ? errorCode : 'errorAmbienceGeneration'));
-      });
-      child.stdin.end(input ? JSON.stringify(input) : '');
+// One process per take: --free-models releases each stage, exit releases Metal memory.
+export function renderAmbience(track, dataDir, onPhase, signal) {
+  if (!ambienceStatus().installed) throw failure('errorAmbienceInstall');
+  if (!ambienceStatus().validated) throw failure('errorAmbienceValidation');
+  const filename = `${track.id}.wav`;
+  const output = join(dataDir, 'audio', filename);
+  const temporary = output + '.tmp.wav';
+  return new Promise((resolve, reject) => {
+    const child = spawn(python, ['-u', script, '--dit', track.input.model === 'small-music' ? 'sm-music' : 'sm-sfx', '--decoder', 'same-s', '--seconds', String(track.input.duration), '--seed', String(track.input.seed), '--prompt', track.generationPrompt, '--out', temporary, '--free-models'], {
+      cwd: root, env: { ...process.env, HF_HOME: join(root, '.cache-ambiences/huggingface'), HF_HUB_OFFLINE: '1', PYTHONUNBUFFERED: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'], signal,
     });
-  }
-  return {
-    async health() {
-      if (python.includes('/') && !existsSync(python)) return { available: false };
-      try { return await invoke(['--check'], null, null, 15000); }
-      catch { return { available: false }; }
-    },
-    generate(input, output, onProgress) {
-      return invoke([], { model: input.model, prompt: input.prompt, duration: input.duration, seed: input.seed, output }, onProgress, 30 * 60 * 1000);
-    },
-    close() { for (const child of children) child.kill('SIGTERM'); },
-  };
+    let log = '', timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 20 * 60 * 1000);
+    const capture = chunk => {
+      log = (log + chunk.toString()).slice(-12000);
+      if (/\[4\/5\]/.test(log)) onPhase('decoding');
+      else if (/\[3\/5\]/.test(log)) onPhase('generating');
+    };
+    child.stdout.on('data', capture); child.stderr.on('data', capture);
+    child.on('error', () => { clearTimeout(timer); rmSync(temporary, { force: true }); reject(failure('errorAmbienceRun')); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (code !== 0 || !existsSync(temporary)) {
+        rmSync(temporary, { force: true });
+        const auth = /GatedRepo|401|403|gated repo|authentication/i.test(log);
+        reject(failure(auth ? 'errorAmbienceAuth' : timedOut ? 'errorAmbienceTimeout' : 'errorAmbienceRun')); return;
+      }
+      renameSync(temporary, output);
+      resolve({ audioFile: filename, returnedSeed: track.input.seed, engineResult: { backend: 'mlx', revision: ambienceRevision, model: track.input.model, sampleRate: 44100, channels: 2 } });
+    });
+  });
 }

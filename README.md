@@ -1,18 +1,34 @@
 # Afterboot Studio
 
-Version 0.11 adds a local **Ambiences** workspace using **Stable Audio 3**: Small-Music for musical pads, Small-SFX for sound textures, and separate hiss controls. Run `npm run setup:ambiences` or double-click `Installer les ambiances.command`, then accept the Hugging Face model agreements and sign in. [Setup and behavior](docs/ambiences.md).
-
 [English](README.md) · [Français](README.fr.md)
 
-A retro music workstation for the [official ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) API. Create instrumentals, keep your seeds in view, and collect your tracks in a local library.
+A retro music workstation for the [official ACE-Step 1.5 API](https://github.com/ace-step/ACE-Step-1.5) and [local Stable Audio 3 through MLX](https://github.com/Stability-AI/stable-audio-3/tree/main/optimized/mlx). Create instrumentals, pads and sound textures, then keep your takes and albums in one local library.
 
-Independent community UI. ACE-Step runs separately for the composer; the Ambiences workspace starts Stable Audio locally on demand. No model weights are bundled.
+Independent community UI. ACE-Step runs separately; Stable Audio 3 uses a project-local Python environment. No model weights are bundled.
 
 ![Afterboot Studio in English](docs/screenshots/en.jpg)
 
 ## Preview status
 
-Version 0.11.0 is an early preview. Single-track generation has been reported working on Apple Silicon. Long sessions are tested against a simulated API, with real FFmpeg tests for assembly and output duration. Long-session generation on a real ACE-Step installation still needs validation. Hardware performance depends on the engine and its models.
+Version 0.12.0 is an early preview. Stable Audio 3 / MLX takes have been validated with real generation on a MacBook Pro M5 Max. Automated tests also use simulated engines and real FFmpeg for HTTP contracts, fades, exports and recovery. See the [album validation report](docs/ambience-albums-validation.md) for real runs and their limits. Long-session generation on a real ACE-Step installation remains a separate validation.
+
+## Stable Audio 3 / MLX and ambience albums
+
+![Local ambiences on Apple Silicon](docs/screenshots/ambiences-en.png)
+
+On an Apple Silicon Mac, double-click **Installer les ambiances.command**, or run `npm run setup:ambiences`. It installs official sources and locked dependencies in an isolated Python environment, downloads weights and validates MLX with two real generations. Start the studio as usual and open **Ambiences**. Keep the ACE-Step API reachable so Afterboot can check that its queue is idle.
+
+**Musical pads** uses Small-Music for drumless pads and drones. **Sound textures** uses Small-SFX for wind, air and low rumble. Both modes offer a free prompt, their own examples, 5–120 second durations and fixed or random seeds. Independent background noise and an optional fade are added by FFmpeg to a separate WAV copy; originals remain available.
+
+![Ambience album and looping mix](docs/screenshots/ambience-album-en.png)
+
+Choose **An album**, a name, 1–100 tracks and duration bounds between 5 and 120 seconds. A random whole duration is saved for each track before generation starts. Names use your take title followed by a number, for example **Brumes nocturnes - 01**. Pausing, resuming and reloading preserve the plan and seeds. Albums remain accessible in Ambiences and the library.
+
+**Album ZIP** exports finalized tracks as numbered MP3 files at 320 kbit/s, with album tags, using the same exporter as ACE-Step. WAVs and originals remain available individually. Partial export is supported while paused or after stopping.
+
+Enable **Also create a looping mix with crossfades** to make, for example, two hours from 15 tracks. Targets range from 1 to 240 minutes. Every pass shuffles the tracks; with three or more tracks, pass boundaries avoid consecutive repeats. The mix reuses originals, adds continuous background noise and applies the ending fade once. Download it as a separate WAV; the ZIP contains the distinct album tracks. Repetitions never generate new audio.
+
+[Installation and Hugging Face login](docs/ambiences.md). If a token is required, enter it only in your local terminal, never in chat. [Album validation and manual checklist](docs/ambience-albums-validation.md).
 
 ## What you can do
 
@@ -37,8 +53,7 @@ A seed alone does not guarantee identical audio across different model versions,
 ## Requirements
 
 - Node.js 20 or newer.
-- For the music composer: an installed and working ACE-Step 1.5 REST API with the Turbo model.
-- For ambiences: the Stable Audio Python environment and Hugging Face model access. ACE-Step can remain stopped.
+- An installed and working ACE-Step 1.5 REST API with the Turbo model.
 - A modern browser.
 
 Run `npm ci --ignore-scripts` to install the studio's ZIP library and development dependencies. ACE-Step has its own installation requirements and model downloads. Follow its [installation guide](https://github.com/ace-step/ACE-Step-1.5#readme) first.
@@ -198,7 +213,7 @@ Audio and generation metadata live in `.data/` beside the server. Back up that f
 
 The studio copies completed audio from ACE-Step into its own library. Existing Gradio outputs are not imported automatically. A paused job tracker does not cancel generation on the engine; use “Check status” to resume it. Pending outputs remain subject to the engine's cache policy until copied.
 
-This preview supports instrumental text-to-music and session assembly. Remix, repaint and LoRA training are outside its current scope. The LM backend is MLX on macOS and PyTorch elsewhere.
+This preview supports ACE-Step instrumentals, Stable Audio 3 ambiences, albums and looping mixes. Remix, repaint and LoRA training are outside its current scope. The LM backend is MLX on macOS and PyTorch elsewhere.
 
 ## Development
 

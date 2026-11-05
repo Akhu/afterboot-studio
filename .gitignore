@@ -5,5 +5,8 @@ node_modules/
 .DS_Store
 *.log
 coverage/
+.stable-audio-src/
+.venv-ambiences/
+.cache-ambiences/
+output/playwright/
 .stable-audio/
-__pycache__/

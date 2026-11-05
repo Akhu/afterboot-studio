@@ -17,7 +17,7 @@ if [ -z "$STUDIO_NODE" ] || ! "$STUDIO_NODE" -e 'process.exit(Number(process.ver
   read -r -p "Appuie sur Entrée pour fermer."
   exit 1
 fi
-export PATH="$(dirname "$STUDIO_NODE"):$PATH"
+export PATH="$(dirname "$STUDIO_NODE"):/opt/homebrew/bin:/usr/local/bin:$PATH"
 if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
   echo "Installation des composants du studio…"
   if ! npm ci --ignore-scripts --no-audit --no-fund; then
@@ -26,8 +26,7 @@ if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modu
   fi
 fi
 echo "Garde cette fenêtre ouverte pendant l’utilisation du studio."
-echo "Musique : lance l’API ACE-Step séparément sur le port 8001."
-echo "Ambiances : Stable Audio est lancé à la demande depuis l’onglet dédié."
+echo "L’API ACE-Step doit être lancée séparément sur le port 8001."
 (sleep 1; open "http://127.0.0.1:3210") &
 "$STUDIO_NODE" server.mjs
 read -r -p "Appuie sur Entrée pour fermer."

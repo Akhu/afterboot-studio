@@ -1,68 +1,92 @@
-# Local ambiences with Stable Audio 3
+# Ambiances · Stable Audio 3
 
-Afterboot 0.11 adds an **Ambiences** workspace alongside the ACE-Step composer.
+## Installation sur un Mac Apple Silicon
 
-- **Musical pads** uses Stable Audio 3 `small-music` for ambient music and drones.
-- **Sound textures** uses `small-sfx` for sound effects and continuous soundscapes.
-- Both modes accept a prompt, a duration of 5–120 seconds and a seed. No BPM or ACE-Step planning parameters are sent to these models.
-- Output is WAV. Tracks share the library, favorites, downloads, metadata and settings reuse with music tracks. Settings reuse opens the appropriate workspace.
+1. Installer Node.js 20+, [uv](https://docs.astral.sh/uv/getting-started/installation/) et FFmpeg, par exemple `brew install uv ffmpeg`.
+2. Lancer l’API ACE-Step habituelle sur le port 8001. Laisser sa file vide.
+3. Double-cliquer sur **Installer les ambiances.command**. Le lanceur récupère les sources officielles à une révision fixe, crée `.venv-ambiences` avec Python 3.11, installe les dépendances verrouillées et télécharge les poids nécessaires. Prévoir environ 2,6 Go pour les poids et l’environnement.
+4. L’installation génère réellement deux WAV de cinq secondes et vérifie durée, stéréo, fréquence, valeurs finies et absence de silence. MLX est activé seulement après cette validation. Les preuves sont dans `.data/ambience-validation.json` et `.data/ambience-validation-small-*.wav`.
+5. Lancer **Lancer le studio.command**, puis ouvrir **Ambiances**. Si le studio était déjà ouvert, le relancer, puis recharger la page.
 
-## Setup on macOS
+Le moteur utilise Metal via MLX, sans CUDA ni PyTorch/MPS. La première utilisation compile certains calculs. Les mesures des sources officielles ne constituent pas une promesse de performance sur votre Mac.
 
-Double-click `Installer les ambiances.command`, or run this from the Afterboot directory:
+## Hugging Face
 
-```sh
-npm run setup:ambiences
-```
+Les poids optimisés officiels étaient téléchargeables anonymement lors de la validation sur M5 Max. Si l’accès est refusé ou limité :
 
-The installer uses uv and Python 3.12, in an isolated `.stable-audio/.venv` environment. If uv is missing, its official installer is downloaded into `.stable-audio`, without changing the shell profile. The Stable Audio source is pinned to commit `790793b89ddceea612be9ce42ff6830d18f6fa57`. No Gradio server is needed.
-
-The model repositories require Hugging Face access. Open each model card and accept its conditions with your own account:
-
-- [Small-Music](https://huggingface.co/stabilityai/stable-audio-3-small-music)
-- [Small-SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx)
-
-Then authenticate in the terminal when needed:
+1. Ouvrir [le dépôt des poids optimisés](https://huggingface.co/stabilityai/stable-audio-3-optimized), [Small-Music](https://huggingface.co/stabilityai/stable-audio-3-small-music) et [Small-SFX](https://huggingface.co/stabilityai/stable-audio-3-small-sfx). Se connecter dans le navigateur et accepter les conditions si demandé. Consulter aussi la [licence Stability AI](https://stability.ai/license) et les conditions des composants.
+2. Depuis le dossier du studio, lancer dans le terminal :
 
 ```sh
-.stable-audio/.venv/bin/hf auth login
+HF_HOME="$PWD/.cache-ambiences/huggingface" .venv-ambiences/bin/hf auth login
 ```
 
-Enter the token only in that terminal. Afterboot does not request or store it in the browser or its library. Python uses the Hugging Face client's normal local credential storage. Consult the model cards for their license terms.
+3. Saisir le jeton uniquement dans l’invite locale masquée du terminal. Ne pas le mettre dans le chat, un fichier du dépôt, une capture ou une ligne de commande. Ne pas l’ajouter aux identifiants Git.
+4. Relancer l’installateur. Les téléchargements déjà terminés sont réutilisés.
 
-Start Afterboot normally and open **Ambiances**. The installation check confirms that the Python runtime is present, not that model access has been granted or weights have been downloaded. Weights and text conditioning dependencies download on the first take, then use the normal Hugging Face cache. This requires internet access and enough disk space during setup and first use; generation uses the local machine rather than a paid audio API.
+Le cache des poids et des éventuels identifiants reste dans `.cache-ambiences`, exclu de Git. Après installation, les prises du studio imposent le mode hors ligne Hugging Face.
 
-## Memory and configuration
+## Utilisation
 
-The default device is CPU for compatibility with Apple Silicon. Each take starts an isolated Python process, loads one Small model, writes the audio and exits to release model memory. Switching modes loads the corresponding model on the next take. There is no persistent second model server.
+- **Nappes musicales / Small-Music** : drones et nappes éthérées. Le serveur ajoute une consigne sans batterie, percussion, rythme ni voix. L’adhésion au prompt dépend du modèle.
+- **Textures sonores / Small-SFX** : vent, souffle et grondements continus. Le serveur ajoute une consigne sans musique ni parole.
+- Prompt libre, exemples propres à chaque mode, durée entière de 5 à 120 secondes, seed fixe ou aléatoire. Les descriptions anglaises sont recommandées par Stability AI.
+- Le souffle séparé propose désactivé, blanc, rose, brun ou sombre. Son volume va de −60 à −12 dB. FFmpeg l’ajoute après génération sur une copie WAV.
+- Le fondu final est facultatif. Sa durée effective ne dépasse pas la moitié de la prise, par exemple 2,5 secondes sur une prise de 5 secondes.
+- L’original est conservé. La bibliothèque commune propose lecteur, téléchargement WAV traité et original, favoris, JSON des réglages, reprise et variation. Les prises Ambiances se restaurent dans Ambiances, les prises ACE-Step dans Composer. Les deux formulaires gardent des brouillons distincts.
 
-Afterboot refuses overlapping music and ambience jobs. This does not unload models in an independently running ACE-Step server. On a 16 GB Mac, stop other AI model servers if memory is tight. Start with a 5–10 second take; runtime depends on the machine. The native PyTorch path used here does not claim the latency of upstream's separate optimized CoreML runtime.
+## File et mémoire
 
-Optional environment variables, set before launching the studio:
+### Albums et mix bouclés
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `STABLE_AUDIO_PYTHON` | `.stable-audio/.venv/bin/python` under Afterboot | Use a different Python environment with the pinned Stable Audio API installed |
-| `STABLE_AUDIO_DEVICE` | `cpu` | `cpu`, `mps` or `cuda`; alternative devices require compatible hardware and libraries |
+Dans **Ambiances**, choisir **Un album**. Le nom de l’essai devient le nom d’album. Régler 1 à 100 morceaux, puis les bornes de durée, de 5 à 120 secondes. Chaque durée entière est tirée avant la génération. Le plan est enregistré avec la seed de base ; les seeds des pistes sont incrémentées. Une pause, un rechargement ou une reprise conservent ces choix. Une seed fixe permet de refaire le même plan de durées.
 
-## Separate hiss and endings
+La file génère une piste à la fois. Les titres utilisent le nom d’album et un numéro à deux chiffres au minimum, par exemple `Brumes nocturnes - 01`. Les albums sont affichés dans Ambiances et dans la bibliothèque, avec progression, pause, reprise, arrêt, métadonnées et reprise des réglages. Arrêter termine la piste en cours puis conserve les morceaux finalisés. Le ZIP reste disponible pour les pistes finalisées d’un album en pause ou arrêté.
 
-Noise controls are independent from the prompt and have their own saved draft, separate from the ACE-Step composer. Choose white, pink, brown or dark noise, and set the generator gain from −60 to −12 dB. Dark noise is filtered brown noise between 20 and 180 Hz.
+**Album ZIP** utilise l’exporteur ACE-Step : un MP3 320 kbit/s par piste, avec nom numéroté, titre, numéro et tag d’album. Le ZIP contient les pistes distinctes, pas toutes leurs répétitions. Les fichiers WAV et les originaux sont conservés et se téléchargent depuis la bibliothèque.
 
-FFmpeg adds the noise after generation to a separate WAV copy. The original model audio remains available. The noise slider controls only added noise; it cannot remove hiss the model generated as part of its own output. An optional final fade includes both the generated audio and added noise. Seamless looping is not guaranteed. Noise and fades require FFmpeg; without it, clean generation remains available.
+**Créer aussi un mix bouclé avec fondus** construit un WAV de durée cible, de 1 à 240 minutes, après la génération. Pour deux heures à partir de quinze morceaux, régler **15** et **120 minutes**. Le diffuseur ne génère que les quinze morceaux. Le mix parcourt des permutations de l’album jusqu’à la durée cible, en comptant les recouvrements des fondus. L’ordre enregistré reste le même lors d’une nouvelle tentative d’assemblage. Chaque passage change d’ordre quand il y a au moins deux morceaux ; avec trois ou plus, la même piste n’est pas répétée de part et d’autre d’une frontière de passage. Avec une seule piste, elle est répétée avec fondu sur elle-même.
 
-The first version creates individual takes, not long ambience sessions. Existing long ACE-Step sessions retain their own workflow.
+Le fondu entre pistes doit être plus court que la moitié de la durée minimum. Le mix utilise les originaux pour éviter de répéter les fins adoucies des fichiers individuels. Le souffle est ajouté en un seul flux au mix complet, puis le fondu final est appliqué une fois. La sortie est coupée à la durée cible exacte. Cela rend les raccords progressifs, sans garantir une identité de timbre ou d’harmonie entre deux générations. La jonction entre la fin et le début du WAV exporté n’est pas conçue comme une boucle infinie sans couture.
 
-## Failures and recovery
+L’assemblage prépare des corps de pistes et de courts raccords par paire dans un dossier temporaire, puis lit un manifeste concaténé en flux. Il évite un graphe FFmpeg chargeant toutes les répétitions en parallèle. Le WAV stéréo de deux heures occupe environ 1,27 Go. Un échec d’assemblage met l’album en pause ; **Reprendre** réutilise les prises existantes.
 
-Generation continues if the browser closes, as long as the Afterboot Node server remains running. Closing the server also stops its Python workers. On restart, incomplete Python jobs are marked interrupted and must be explicitly relaunched using their saved settings. Afterboot never silently resubmits them. A worker exceeding 30 minutes is stopped.
+Afterboot refuse une nouvelle génération tant qu’une piste est en attente ou qu’une session longue réserve le studio. Avant Stable Audio, il vérifie `/v1/stats` d’ACE-Step. Si l’API est inaccessible ou occupée, la prise est refusée. Les sessions en pause doivent être terminées avant d’utiliser Ambiances.
 
-If generation succeeded but FFmpeg processing failed, the archived original is retained. Checking the track status retries processing without downloading weights or generating a new take. An access error explains how to accept the model conditions and authenticate; prompts and settings remain available for reuse.
+Pour éviter la concurrence entre applications, lancer les générations depuis cette instance Afterboot et laisser les autres clients ACE-Step au repos. L’API ACE-Step ne fournit pas de réservation atomique commune avec Stable Audio : un client externe pourrait démarrer après la vérification. Ne pas utiliser deux instances du studio sur la même bibliothèque.
 
-## Implementation and validation
+Chaque prise lance un processus Python distinct avec `--free-models`. L’encodeur texte et le diffuseur sont libérés progressivement, puis la sortie du processus libère sa mémoire Metal. ACE-Step conserve sa propre mémoire. Un arrêt du studio interrompt la prise locale ; au redémarrage, elle apparaît en échec avec ses réglages, sans relance automatique. Une prise dépassant 20 minutes est arrêtée. Si la génération a déjà produit un WAV mais que le traitement FFmpeg échoue, la prise reste en attente et la vérification du statut réessaie sur cet original, y compris après redémarrage, sans relancer le modèle.
 
-`ambience-engine.mjs` launches `scripts/stable_audio_worker.py` using a private JSON-lines protocol, without a shell. The worker uses upstream `StableAudioModel.from_pretrained` and `generate`, fixes generation to eight steps and one sample, passes the requested seed, and writes a stereo PCM WAV before the existing Afterboot processing pipeline runs. Stable Audio's own output is clamped to the PCM range without applying a separate peak normalization.
+## Vérification
 
-Tests cover validation, model selection, missing runtime, resource exclusion, saved errors, restart recovery, post-processing retries and shared library persistence. HTTP integration tests use a simulated model with real FFmpeg processing; they do not demonstrate model audio quality. A real generation additionally requires access to the gated weights.
+`npm test` couvre les contrats HTTP avec modèles simulés, les verrous, la persistance et le vrai traitement FFmpeg. Ces tests ne prouvent pas une génération IA.
 
-References: [upstream code and hardware notes](https://github.com/Stability-AI/stable-audio-3), [official prompting guide](https://stability.ai/guides/stable-audio-3-prompt-guide).
+` .venv-ambiences/bin/python scripts/validate-ambiences.py` génère vraiment avec les deux modèles, et invalide la validation précédente en cas d’échec. L’API ACE-Step doit être lancée et au repos. Les fichiers de validation ne sont pas ajoutés à la bibliothèque.
+
+Vérification manuelle :
+
+1. Dans Ambiances, choisir un exemple Small-Music, durée 5 s, seed fixe, souffle rose à −32 dB et fondu 3 s. Générer. Attendre une prise prête, écouter, télécharger les deux WAV et le JSON. L’original doit garder son audio, la copie doit contenir le souffle et terminer en fondu.
+2. Choisir Small-SFX et l’exemple de vent, désactiver souffle et fondu, activer seed aléatoire. Générer. Le JSON doit indiquer Small-SFX et la seed tirée.
+3. Ajouter un favori, aller dans Bibliothèque, filtrer les favoris, reprendre les réglages. Le bon onglet, le modèle et la seed doivent être restaurés. Reprendre aussi une ancienne piste ACE-Step pour vérifier Composer.
+4. Passer en anglais et revenir en français. Vérifier labels, états et exemples sans modification du prompt utilisateur.
+5. Pendant une prise, vérifier que le lancement d’une autre prise est bloqué. Avec ACE-Step occupé, Ambiances doit renvoyer une erreur utile avant de charger MLX.
+
+Les tests courts ne valident pas la qualité artistique ni toutes les durées jusqu’à 120 s. Une seed fixe sert à refaire les réglages ; l’identité binaire n’est pas garantie entre versions de MLX et matériels différents.
+
+## Sources officielles et version
+
+- [Code et interface officielle](https://github.com/Stability-AI/stable-audio-3), révision `790793b89ddceea612be9ce42ff6830d18f6fa57`.
+- [Moteur MLX et options](https://github.com/Stability-AI/stable-audio-3/tree/790793b89ddceea612be9ce42ff6830d18f6fa57/optimized/mlx) : `sm-music`, `sm-sfx`, décodeur SAME-S, 8 étapes, diffuseur FP16, décodeur FP32, WAV stéréo 44,1 kHz.
+- [Présentation des modèles](https://github.com/Stability-AI/stable-audio-3/blob/main/docs/guides/model-overview.md).
+
+## English quick start
+
+Start ACE-Step and leave its queue idle. Install Node.js 20+, uv and FFmpeg. Run **Installer les ambiances.command**, then **Lancer le studio.command**. The installer creates a project-local Python environment and runs two real five-second MLX generations before enabling acceleration. Choose **English** in Afterboot, then open **Ambiences**.
+
+Small-Music generates drumless musical pads; Small-SFX generates continuous sound textures. Noise and optional fade are applied with FFmpeg to a separate WAV copy. Originals, metadata, favorites and settings reuse share the main library. Keep other ACE-Step clients idle. Each take exits its Python process to release Metal memory.
+
+If Hugging Face denies access, accept the terms in your browser and use the local `hf auth login` command above. Never paste a token into chat. Run the installer again after login. Generation itself uses cached weights offline.
+
+For an album, choose **An album**, enter a title, a track count and duration bounds. Durations and seeds are saved before the first generation; tracks are numbered from your title. Pause/resume preserves completed audio and the plan. **Album ZIP** exports finalized tracks as numbered 320 kbit/s MP3 files with album tags, using the ACE-Step exporter.
+
+Enable the looping mix for an exact target such as 120 minutes. Every pass shuffles the existing tracks. Crossfades are counted toward the target; no additional generation happens for repeats. The mix uses originals, one continuous noise stream and one ending fade. Download the long WAV separately. Its final-to-first boundary is not an infinite seamless-loop guarantee. See [album validation](ambience-albums-validation.md).

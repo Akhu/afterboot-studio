@@ -65,7 +65,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
         save(); return;
       }
       if (session.nextIndex === session.plan.durations.length) {
-        if (session.plan.mode === 'mix') {
+        if (session.plan.mode === 'mix' || session.plan.loop?.enabled) {
           session.status = 'assembling'; save();
           const ready = session.trackIds.map(id => listTracks().find(track => track.id === id)).filter(track => track?.status === 'ready');
           const output = await assemble(session, ready, dataDir, controller.signal);
@@ -95,7 +95,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
           session.currentTrackId = accepted.id;
           if (!session.trackIds.includes(accepted.id)) session.trackIds.push(accepted.id);
           session.submissionUnknown = false;
-        } else if (['errorEngine', 'errorEngineHttp'].includes(error.code)) session.submissionUnknown = false;
+        } else if (error.submissionRejected || ['errorEngine', 'errorEngineHttp'].includes(error.code)) session.submissionUnknown = false;
       }
       session.status = 'paused';
       session.errorCode = session.submissionUnknown ? 'errorSessionSubmission' : error.code || 'errorSessionMix';
@@ -112,7 +112,7 @@ export function createSessionManager({ dataDir, listTracks, submitTrack, syncTra
     get: id => sessions.find(session => session.id === id),
     start(input, plan) {
       if (closed || busy() || listTracks().some(track => track.status === 'pending')) fail('errorSessionBusy');
-      if ((plan.mode === 'mix' || needsTexture(plan)) && !canMix) fail('errorFfmpeg', 400);
+      if ((plan.mode === 'mix' || plan.loop?.enabled || needsTexture(plan)) && !canMix) fail('errorFfmpeg', 400);
       const session = { id: randomUUID(), input, plan, trackSettings: createTrackSettings(input, plan), status: 'running', nextIndex: 0, trackIds: [], currentTrackId: null, createdAt: new Date().toISOString(), submissionUnknown: false };
       sessions.unshift(session); save();
       schedule();

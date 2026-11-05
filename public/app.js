@@ -6,7 +6,7 @@ import { hasMastering, masteringSettings } from '/mastering.js';
 import { hasEnding } from '/ending.js';
 import { completedSessionTracks, sessionTrackTitle } from '/session-names.js';
 import { musicModel } from '/music-models.js';
-import { createAmbienceWorkspace } from '/ambiences.js';
+import { ambienceAlbumSettings } from '/ambience-album.js';
 
 const $ = (id) => document.getElementById(id);
 let savedLanguage;
@@ -30,9 +30,19 @@ const presets = {
 let tracks = [], online = false, connectionChecked = false, submitting = false, favoritesOnly = false, toastTimer;
 let sessions = [], canMix = false, sessionRefresh = false;
 let availableModels = [];
+let ambienceEngine = {};
+const ambiencePresets = {
+  'small-music': [
+    ['ambienceClouds', 'Ethereal sustained synthesizer pads, warm slowly evolving harmonies, weightless ambient drone, spacious reverb, no drums, no percussion, no vocals.'],
+    ['ambienceDeep', 'Deep meditative drone, dark resonant synthesizer layers, very slow harmonic movement, soft distant shimmering overtones, no rhythm, no drums, no vocals.'],
+  ],
+  'small-sfx': [
+    ['ambienceWind', 'Continuous soft wind through a dark empty valley, low distant rumble, steady airy noise, no music, no speech, no impacts.'],
+    ['ambienceRumble', 'Continuous deep subterranean rumble, slowly shifting low frequencies, distant cavern resonance, steady dark atmospheric texture, no music, no voices, no sudden impacts.'],
+  ],
+};
 const exportingSessions = new Set();
 const polling = new Map();
-let ambience;
 
 function node(tag, className, text) {
   const item = document.createElement(tag);
@@ -105,11 +115,11 @@ function updateForm() {
   $('seed').disabled = $('random-seed').checked;
   const duration = Number($('duration').value);
   const mode = $('generation-mode').value;
-  document.querySelector('[data-i18n="trackName"]').textContent = t(mode === 'single' ? 'trackName' : 'sessionName');
+  $('generation-form').querySelector('[data-i18n="trackName"]').textContent = t(mode === 'single' ? 'trackName' : 'sessionName');
   $('track-title').placeholder = t(mode === 'single' ? 'titlePlaceholder' : 'sessionTitlePlaceholder');
-  document.querySelector('[data-i18n="duration"]').textContent = t(mode === 'single' ? 'duration' : 'perTrackDuration');
-  document.querySelector('[data-i18n="randomSeed"]').textContent = t(mode === 'single' ? 'randomSeed' : 'randomSessionSeed');
-  document.querySelector('[data-i18n="seedHint"]').textContent = t(mode === 'single' ? 'seedHint' : 'sessionSeedHint');
+  $('generation-form').querySelector('[data-i18n="duration"]').textContent = t(mode === 'single' ? 'duration' : 'perTrackDuration');
+  $('generation-form').querySelector('[data-i18n="randomSeed"]').textContent = t(mode === 'single' ? 'randomSeed' : 'randomSessionSeed');
+  $('generation-form').querySelector('[data-i18n="seedHint"]').textContent = t(mode === 'single' ? 'seedHint' : 'sessionSeedHint');
   $('session-options').hidden = mode === 'single';
   $('bpm-range').hidden = !$('vary-bpm').checked;
   $('bpm-min').disabled = $('bpm-max').disabled = mode === 'single' || !$('vary-bpm').checked;
@@ -184,17 +194,18 @@ function setForm(input) {
 }
 function seedOf(track) { return String(track.returnedSeed ?? track.input.seed); }
 function restore(track, variation) {
+  if (track.input.engine === 'stable-audio-3') {
+    setAmbienceForm({ ...track.input, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, randomSeed: variation });
+    location.hash = 'ambiences'; $('ambience-title').focus(); toast(t('restoreSettings')); return;
+  }
   const returnedSeed = Number(seedOf(track).split(',')[0]);
-  const restored = {
+  setForm({
     ...track.input, mastering: track.texture?.mastering || track.input.mastering, ending: track.texture?.ending || track.input.ending, background: track.texture?.background || track.input.background, title: (track.displayTitle || track.input.title) + (variation ? t('variationSuffix') : ''),
     seed: Number.isInteger(returnedSeed) && returnedSeed >= 0 ? returnedSeed : track.input.seed,
     randomSeed: variation,
-  };
-  if (track.input.engine === 'stable-audio-3') {
-    ambience.restore(restored); location.hash = 'ambiences'; $('ambience-title').focus();
-  } else {
-    setForm(restored); location.hash = 'create'; $('track-title').focus();
-  }
+  });
+  location.hash = 'create';
+  $('track-title').focus();
   toast(t(variation ? 'restoreVariation' : 'restoreSettings'));
 }
 function action(label, handler, className = '') {
@@ -226,8 +237,7 @@ function audioCard(track) {
   const info = node('div', 'track-info');
   info.append(node('h3', '', title));
   const meta = node('div', 'track-meta');
-  const isAmbience = track.input.engine === 'stable-audio-3';
-  meta.append(node('span', '', isAmbience ? t(track.input.mode === 'sfx' ? 'ambienceSfx' : 'ambienceMusic') : track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
+  meta.append(node('span', '', track.input.engine === 'stable-audio-3' ? 'Stable Audio 3 · ' + track.input.model : track.input.bpm + ' BPM'), node('span', '', track.input.duration + ' s'));
   if (track.texture) meta.append(node('span', '', textureDescription(track.texture)));
   const seedKey = (track.returnedSeed === null || track.returnedSeed === undefined) ? 'seedRequested' : 'seedReturned';
   meta.append(node('span', '', t(seedKey, { seed: seedOf(track) })));
@@ -254,7 +264,7 @@ function audioCard(track) {
     audio.addEventListener('error', () => toast(t('playbackError'), true));
     card.append(audio);
   } else {
-    card.append(node('p', track.status === 'failed' ? 'track-error' : 'pending-message', track.status === 'failed' ? trackError(track) : t('waitingResult')));
+    card.append(node('p', track.status === 'failed' ? 'track-error' : 'pending-message', track.status === 'failed' ? trackError(track) : t(track.phase ? 'ambiencePhase_' + track.phase : 'waitingResult')));
   }
   const buttons = node('div', 'track-actions');
   if (track.status === 'ready') {
@@ -287,7 +297,8 @@ function audioCard(track) {
   const details = node('details', 'track-details');
   details.append(node('summary', '', t('promptDetails')));
   details.append(node('p', '', track.input.prompt));
-  details.append(node('code', '', (isAmbience ? 'Stable Audio 3 · ' + track.input.model : track.input.model + ' · ' + t(track.input.thinking ? 'planningOn' : 'planningOff')) + ' · ' + t('seedRequested', { seed: track.input.seed })));
+  details.append(node('code', '', track.input.model + ' · ' + (track.input.engine === 'stable-audio-3' ? 'MLX · 8 steps · ' : t(track.input.thinking ? 'planningOn' : 'planningOff') + ' · ') + t('seedRequested', { seed: track.input.seed })));
+  if (track.generationPrompt && track.generationPrompt !== track.input.prompt) details.append(node('p', 'field-note', track.generationPrompt));
   if (track.pollError) details.append(node('p', 'track-error', errorMessage(track.pollError)));
   card.append(details);
   return card;
@@ -313,32 +324,43 @@ function renderLibrary() {
 }
 function render() {
   $('nav-count').textContent = tracks.length;
-  fillList('recent-tracks', tracks.filter(track => track.input.engine !== 'stable-audio-3').slice(0, 3));
+  fillList('recent-tracks', tracks.slice(0, 3));
+  fillList('ambience-tracks', tracks.filter(track => track.input.engine === 'stable-audio-3').slice(0, 3));
   renderLibrary();
-  ambience?.render(tracks);
   updateActivity();
 }
 function sessionIsOpen(session) { return !['complete', 'stopped'].includes(session.status); }
 function renderSessions() {
-  $('sessions-section').hidden = !sessions.length;
-  const list = $('session-list');
+  const albums = sessions.filter(session => session.plan.kind === 'ambience-album');
+  const ace = sessions.filter(session => session.plan.kind !== 'ambience-album');
+  $('sessions-section').hidden = !ace.length;
+  $('ambience-albums-section').hidden = $('library-albums-section').hidden = !albums.length;
+  renderSessionList('session-list', ace);
+  renderSessionList('ambience-album-list', albums);
+  renderSessionList('library-album-list', albums);
+  updateActivity();
+}
+function renderSessionList(id, items) {
+  const list = $(id);
   list.replaceChildren();
-  for (const session of sessions) {
+  for (const session of items) {
+    const album = session.plan.kind === 'ambience-album';
     const card = node('article', 'session-card');
     card.append(node('h3', '', session.input.title));
     if (hasMastering(session.plan.mastering)) card.append(node('p', 'field-note', t('masteringSummary', { lufs: session.plan.mastering.targetLufs })));
     if (hasBackground(session.plan.background)) card.append(node('p', 'field-note', backgroundDescription(session.plan.background)));
     if (hasEnding(session.plan.ending)) card.append(node('p', 'field-note', t('endingSummary', { seconds: session.plan.ending.seconds })));
-    card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 })));
+    card.append(node('p', 'session-state', t('sessionState_' + session.status) + ' · ' + t(album ? 'albumProgress' : 'sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: Math.round(session.plan.targetSeconds / 60) })));
+    if (album && session.plan.loop.enabled) card.append(node('p', 'field-note', t('albumLoopSummary', { minutes: session.plan.loop.minutes, fade: session.plan.loop.crossfadeSeconds })));
     const progress = node('progress');
     progress.max = session.plan.durations.length; progress.value = session.completedCount;
     progress.setAttribute('aria-label', t('sessionProgress', { count: session.completedCount, total: session.plan.durations.length, minutes: session.plan.targetSeconds / 60 }));
     card.append(progress);
     if (session.trackSettings) {
-      const plan = node('details', 'session-files'); plan.append(node('summary', '', t('trackPlan')));
+      const plan = node('details', 'session-files'); plan.append(node('summary', '', t(album ? 'albumTrackPlan' : 'trackPlan')));
       const rows = node('ol', 'track-plan');
       session.trackSettings.forEach((settings, index) => {
-        rows.append(node('li', '', sessionTrackTitle(session.input.title, index, session.plan.durations.length) + ' · ' + settings.bpm + ' BPM · ' + session.plan.durations[index] + ' s' + (textureDescription(settings.texture) ? ' · ' + textureDescription(settings.texture) : '')));
+        rows.append(node('li', '', sessionTrackTitle(session.input.title, index, session.plan.durations.length) + (album ? '' : ' · ' + settings.bpm + ' BPM') + ' · ' + session.plan.durations[index] + ' s' + (textureDescription(settings.texture) ? ' · ' + textureDescription(settings.texture) : '')));
       });
       plan.append(rows); card.append(plan);
     }
@@ -353,11 +375,14 @@ function renderSessions() {
     if (session.status === 'paused' && !session.submissionUnknown) buttons.append(action(t('sessionResume'), () => control('resume')));
     if (sessionIsOpen(session) && session.status !== 'assembling') buttons.append(action(t('sessionStop'), () => control('stop')));
     if (session.audioURL) {
-      const download = node('a', 'download', t('downloadMix')); download.href = session.audioURL; download.download = ''; buttons.append(download);
+      const download = node('a', 'download', t(album ? 'albumDownloadLoop' : 'downloadMix')); download.href = session.audioURL; download.download = ''; buttons.append(download);
     }
+    if (album) buttons.append(action(t('reuse'), () => {
+      setAmbienceForm({ ...session.input, randomSeed: false, outputMode: 'album', album: session.plan.album }); location.hash = 'ambiences'; $('ambience-title').focus();
+    }));
     const exportable = completedSessionTracks(session, tracks);
     if (exportable.length && ['complete', 'stopped', 'paused'].includes(session.status)) {
-      const exportButton = action(t('downloadSessionMp3', { count: exportable.length }), async () => {
+      const exportButton = action(t(album ? 'albumDownloadZip' : 'downloadSessionMp3', { count: exportable.length }), async () => {
         exportingSessions.add(session.id); renderSessions();
         try {
           const result = await api('/api/sessions/' + session.id + '/mp3', {}, 30 * 60 * 1000);
@@ -383,13 +408,12 @@ function renderSessions() {
     if (ready.length) {
       const files = node('details', 'session-files'); files.append(node('summary', '', t(ready.length === 1 ? 'sessionFile' : 'sessionFiles', { count: ready.length })));
       for (const track of ready) {
-        const link = node('a', '', '↓ ' + (track.displayTitle || track.input.title) + ' · ' + track.input.bpm + ' BPM'); link.href = downloadURL(track.audioURL); link.download = ''; files.append(link);
+        const link = node('a', '', '↓ ' + (track.displayTitle || track.input.title) + (album ? ' · ' + track.input.duration + ' s' : ' · ' + track.input.bpm + ' BPM')); link.href = downloadURL(track.audioURL); link.download = ''; files.append(link);
       }
       card.append(files);
     }
     list.append(card);
   }
-  updateActivity();
 }
 async function refreshSessions() {
   if (sessionRefresh) return;
@@ -409,7 +433,7 @@ async function refreshSessions() {
   } finally { sessionRefresh = false; }
 }
 function updateActivity() {
-  const pending = tracks.find(track => polling.has(track.id) || (track.input.engine === 'stable-audio-3' && track.status === 'pending'));
+  const pending = tracks.find(track => track.status === 'pending');
   const busy = submitting || Boolean(pending);
   const openSession = sessions.some(sessionIsOpen);
   const values = formValues();
@@ -421,14 +445,14 @@ function updateActivity() {
     try { sessionPlan(sessionOptions(values)); } catch { invalidPlan = true; }
   }
   $('generate').disabled = busy || openSession || invalidPlan || (needsFfmpeg && !canMix);
-  ambience?.update();
   if (busy || openSession) $('generate').textContent = t(openSession ? 'sessionInProgress' : submitting ? 'sending' : 'generating');
   else {
     const icon = node('span', '', '▶');
     icon.setAttribute('aria-hidden', 'true');
     $('generate').replaceChildren(icon, document.createTextNode(' ' + t($('generation-mode').value === 'single' ? 'generate' : 'startSession')));
   }
-  $('activity').hidden = !busy || pending?.input.engine === 'stable-audio-3';
+  $('activity').hidden = !busy;
+  updateAmbienceForm(busy || openSession);
   if (pending) {
     const seconds = Math.max(0, Math.floor((Date.now() - new Date(pending.createdAt).getTime()) / 1000));
     $('elapsed').textContent = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
@@ -448,7 +472,7 @@ async function startPolling(id) {
         const updated = await api('/api/tracks/' + id + '/refresh', {});
         errors = 0;
         tracks = tracks.map(track => track.id === id ? updated : track);
-        if (updated.input.engine === 'stable-audio-3' && updated.status === 'pending') ambience.render(tracks);
+        if (updated.phase) render();
         if (updated.status !== 'pending') {
           render();
           toast(updated.status === 'ready' ? t('trackReady') : trackError(updated), updated.status === 'failed');
@@ -468,7 +492,7 @@ async function startPolling(id) {
   } finally { polling.delete(id); updateActivity(); }
 }
 function route() {
-  const selected = ['#library', '#ambiences'].includes(location.hash) ? location.hash.slice(1) : 'create';
+  const selected = location.hash === '#library' ? 'library' : location.hash === '#ambiences' ? 'ambiences' : 'create';
   document.querySelectorAll('.view').forEach(view => { view.hidden = view.id !== selected; });
   document.querySelectorAll('[data-nav]').forEach(link => {
     link.classList.toggle('active', link.dataset.nav === selected);
@@ -476,8 +500,7 @@ function route() {
     else link.removeAttribute('aria-current');
   });
   $('breadcrumb').textContent = t(selected === 'ambiences' ? 'ambiences' : selected === 'library' ? 'breadcrumbLibrary' : 'breadcrumbCreate');
-  $('window-document').textContent = t(selected === 'ambiences' ? 'windowAmbiences' : selected === 'library' ? 'windowLibrary' : 'windowCreate');
-  $('current-engine').textContent = selected === 'ambiences' ? 'Stable Audio 3' : 'ACE-Step 1.5';
+  $('window-document').textContent = selected === 'ambiences' ? '· ' + t('ambiences') : t(selected === 'library' ? 'windowLibrary' : 'windowCreate');
   document.querySelectorAll('audio').forEach(audio => { if (audio.closest('.view').hidden) audio.pause(); });
 }
 $('apply-stable').addEventListener('click', () => {
@@ -538,6 +561,98 @@ $('favorites-filter').addEventListener('click', () => {
   renderLibrary();
 });
 window.addEventListener('hashchange', route);
+function ambienceValues() {
+  return { title: $('ambience-title').value, prompt: $('ambience-prompt').value, model: $('ambience-model').value,
+    duration: Number($('ambience-duration').value), seed: Number($('ambience-seed').value), randomSeed: $('ambience-random').checked,
+    background: { type: $('ambience-background').value, levelDb: Number($('ambience-volume').value) }, ending: { seconds: Number($('ambience-ending').value) },
+    outputMode: $('ambience-output').value,
+    album: { count: Number($('ambience-count').value), minSeconds: Number($('ambience-min').value), maxSeconds: Number($('ambience-max').value),
+      loop: { enabled: $('ambience-loop').checked, minutes: Number($('ambience-loop-minutes').value), crossfadeSeconds: Number($('ambience-loop-fade').value) } } };
+}
+function renderAmbienceExamples() {
+  const list = $('ambience-examples'); list.replaceChildren(node('span', '', t('startingPoint')));
+  for (const [label, prompt] of ambiencePresets[$('ambience-model').value]) {
+    list.append(action(t(label), () => { $('ambience-prompt').value = prompt; updateAmbienceForm(); }, 'preset'));
+  }
+}
+function setAmbienceForm(input = {}) {
+  $('ambience-output').value = input.outputMode || 'single';
+  $('ambience-count').value = input.album?.count ?? 15;
+  $('ambience-min').value = input.album?.minSeconds ?? 60;
+  $('ambience-max').value = input.album?.maxSeconds ?? 120;
+  $('ambience-loop').checked = input.album?.loop?.enabled ?? false;
+  $('ambience-loop-minutes').value = input.album?.loop?.minutes ?? 120;
+  $('ambience-loop-fade').value = input.album?.loop?.crossfadeSeconds ?? 2;
+  $('ambience-model').value = input.model || (input.mode === 'sfx' ? 'small-sfx' : 'small-music');
+  $('ambience-title').value = input.title || '';
+  $('ambience-prompt').value = input.prompt ?? ambiencePresets[$('ambience-model').value][0][1];
+  $('ambience-duration').value = input.duration ?? 30;
+  $('ambience-seed').value = input.seed ?? 12345;
+  $('ambience-random').checked = input.randomSeed ?? true;
+  $('ambience-background').value = input.background?.type || 'off';
+  $('ambience-volume').value = input.background?.levelDb ?? -32;
+  const seconds = input.ending?.seconds ?? 0;
+  if (![...$('ambience-ending').options].some(option => Number(option.value) === seconds)) {
+    const option = node('option', '', seconds + ' s'); option.value = seconds; $('ambience-ending').append(option);
+  }
+  $('ambience-ending').value = seconds;
+  renderAmbienceExamples(); updateAmbienceForm();
+}
+function updateAmbienceForm(busy = submitting || tracks.some(track => track.status === 'pending') || sessions.some(sessionIsOpen)) {
+  const values = ambienceValues();
+  const album = values.outputMode === 'album';
+  $('ambience-album-options').hidden = !album;
+  $('ambience-single-duration').hidden = album;
+  $('ambience-duration').disabled = album;
+  $('ambience-loop-options').hidden = !values.album.loop.enabled;
+  for (const id of ['ambience-count', 'ambience-min', 'ambience-max', 'ambience-loop']) $(id).disabled = !album;
+  for (const id of ['ambience-loop-minutes', 'ambience-loop-fade']) $(id).disabled = !album || !values.album.loop.enabled;
+  let invalidAlbum = false;
+  if (album) {
+    try {
+      const settings = ambienceAlbumSettings(values.album);
+      $('ambience-album-preview').textContent = t('albumPreview', { count: settings.count, min: settings.minSeconds, max: settings.maxSeconds });
+    } catch (error) { invalidAlbum = true; $('ambience-album-preview').textContent = errorMessage(error); }
+  }
+  $('ambience-seed').disabled = values.randomSeed;
+  $('ambience-volume').disabled = values.background.type === 'off';
+  $('ambience-volume-display').textContent = values.background.levelDb + ' dB';
+  $('ambience-mode-hint').textContent = t(values.model === 'small-music' ? 'ambienceMusicHint' : 'ambienceSfxHint');
+  $('ambience-engine-status').textContent = t(!ambienceEngine.checked ? 'ambienceChecking' : !ambienceEngine.installed ? 'errorAmbienceInstall' : !ambienceEngine.validated ? 'errorAmbienceValidation' : 'ambienceReady');
+  const needsFfmpeg = hasBackground(values.background) || hasEnding(values.ending) || (album && values.album.loop.enabled);
+  $('ambience-generate').disabled = busy || invalidAlbum || !ambienceEngine.installed || !ambienceEngine.validated || (needsFfmpeg && !canMix);
+  $('ambience-generate').textContent = t(busy ? 'generating' : album ? 'albumGenerate' : 'ambienceGenerate');
+  const pending = tracks.find(track => track.input.engine === 'stable-audio-3' && track.status === 'pending');
+  $('ambience-activity').hidden = !pending && !submitting;
+  $('ambience-activity-title').textContent = pending?.input.title || t('sending');
+  $('ambience-activity-detail').textContent = t('ambiencePhase_' + (pending?.phase || 'loading'));
+  try { localStorage.setItem('afterboot-ambience-draft-v1', JSON.stringify(values)); } catch {}
+}
+async function checkAmbienceEngine() {
+  try { ambienceEngine = { ...await api('/api/ambiences/status'), checked: true }; }
+  catch (error) { ambienceEngine = { checked: true }; toast(errorMessage(error), true); }
+  updateAmbienceForm();
+}
+$('ambience-form').addEventListener('input', () => updateAmbienceForm());
+$('ambience-form').addEventListener('change', () => updateAmbienceForm());
+$('ambience-model').addEventListener('change', renderAmbienceExamples);
+$('ambience-recheck').addEventListener('click', checkAmbienceEngine);
+$('ambience-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (submitting || tracks.some(track => track.status === 'pending') || sessions.some(sessionIsOpen)) return;
+  submitting = true; updateActivity();
+  try {
+    const input = ambienceValues(); input.title = input.title.trim() || t('ambiences');
+    if (input.outputMode === 'album') {
+      const session = await api('/api/ambiences/albums', { input, album: input.album });
+      sessions.unshift(session); renderSessions();
+      $('ambience-albums-section').scrollIntoView({ block: 'nearest' }); return;
+    }
+    const track = await api('/api/ambiences/generate', input);
+    tracks.unshift(track); render(); startPolling(track.id);
+  } catch (error) { toast(errorMessage(error), true); }
+  finally { submitting = false; updateActivity(); }
+});
 function translateTree(root) {
   root.querySelectorAll('[data-i18n]').forEach(element => { element.textContent = t(element.dataset.i18n); });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(element => { element.placeholder = t(element.dataset.i18nPlaceholder); });
@@ -553,6 +668,7 @@ function applyLanguage() {
   renderConnection();
   render();
   renderSessions();
+  renderAmbienceExamples();
   clearTimeout(toastTimer);
   $('toast').hidden = true;
 }
@@ -561,17 +677,15 @@ $('language').addEventListener('change', () => {
   try { localStorage.setItem('afterboot-language-v1', language); } catch {}
   applyLanguage();
 });
-ambience = createAmbienceWorkspace({
-  api, t, fillList, toast, reportError: error => toast(errorMessage(error), true),
-  isBusy: () => submitting || tracks.some(track => track.status === 'pending') || sessions.some(sessionIsOpen),
-  onTrack: track => { tracks.unshift(track); render(); startPolling(track.id); },
-});
 let draft;
+let ambienceDraft;
+try { ambienceDraft = JSON.parse(localStorage.getItem('afterboot-ambience-draft-v1')); } catch {}
+setAmbienceForm(ambienceDraft || {});
 try { draft = JSON.parse(localStorage.getItem('afterboot-draft-v1')); } catch {}
 setForm(draft || { prompt: presets.jungle.prompt });
 applyLanguage();
 health();
-ambience.health();
+checkAmbienceEngine();
 try {
   tracks = await api('/api/tracks');
   render();
@@ -580,5 +694,4 @@ try {
 try { await refreshSessions(); } catch (error) { toast(errorMessage(error), true); }
 setInterval(() => { refreshSessions().catch(() => {}); }, 3000);
 setInterval(health, 30000);
-setInterval(() => ambience.health(), 30000);
 setInterval(updateActivity, 1000);

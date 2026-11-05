@@ -87,21 +87,6 @@ h1 { margin: 0; font-size: 28px; line-height: 1.1; letter-spacing: -1px; font-we
 .model-tag strong { font: 10px var(--mono); letter-spacing: 3px; }
 .small-signal { font: 19px var(--mono); letter-spacing: -4px; color: #b1d864; }
 .creation-grid { display: grid; grid-template-columns: minmax(0, 1fr) 278px; gap: 16px; align-items: stretch; }
-.ambience-engine-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 17px; background: #e9e7de; box-shadow: var(--sunken); }
-.ambience-health { font: 10px/1.6 var(--mono); color: #78582e; }
-.ambience-health.available { color: #34552b; }
-.ambience-engine-bar button { padding: 8px 12px; flex-shrink: 0; font-size: 10px; }
-.ambience-title-label { margin-top: 19px; }
-#ambience-title { width: 100%; margin-top: 7px; }
-#ambience-prompt-count { font: 8px var(--mono); color: #5e6971; white-space: nowrap; }
-.ambience-noise { margin-top: 22px !important; background: #e8e9df; }
-.ambience-noise input[type=range] { width: 100%; margin-top: 10px; padding: 0; box-shadow: none; accent-color: #426f79; }
-#ambience-noise-level { font: 10px var(--mono); }
-.ambience-install { padding: 0 16px 12px; margin-top: 18px; border: 1px solid #9d9f98; background: #e8e6dc; }
-.ambience-install p { font-size: 11px; line-height: 1.7; max-width: 740px; }
-.ambience-install pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #fffef9; padding: 12px; box-shadow: var(--sunken); }
-.ambience-model-links { display: flex; flex-wrap: wrap; gap: 18px; font-size: 11px; color: #163c7c; text-decoration: underline; }
-@media (max-width: 620px) { .ambience-engine-bar { align-items: stretch; flex-direction: column; } }
 .panel { min-width: 0; background: #dfddd6; box-shadow: var(--raised); padding: 3px 15px 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -12px 17px; padding: 6px 8px; background: #becbd2; border-bottom: 1px solid #929c9d; box-shadow: 0 1px #fafafa; min-height: 31px; }
 .panel-heading h2 { display: flex; align-items: center; gap: 7px; font-size: 11px; margin: 0; font-weight: bold; }
@@ -111,6 +96,21 @@ label { display: block; font-size: 11px; }
 .optional { color: #61666b; font-size: 10px; margin-left: 4px; }
 #track-title { width: 100%; margin-top: 7px; padding: 9px 10px; font-size: 11px; }
 #track-title::placeholder { color: #7a7e81; }
+#ambience-title { width: 100%; margin: 7px 0 16px; padding: 9px 10px; font-size: 11px; }
+#ambience-form .composer > label { display: block; margin-top: 12px; }
+#ambience-prompt { margin-top: 7px; }
+#ambience-form .background-options > label { display: block; margin: 12px 0 7px; }
+#ambience-volume { width: 100%; }
+#ambience-seed { width: 100%; background: #162b24; color: #d0ed99; font: 14px var(--mono); padding: 10px; }
+#ambience-form .setting-block > .check-label { margin-top: 10px; }
+#ambience-form .check-label > span { font: 10px Tahoma, Verdana, sans-serif; color: inherit; margin-left: 0; }
+#ambience-recheck { padding: 7px 10px; margin-top: 8px; }
+.album-setup { margin: 16px 0; padding: 14px; border: 1px solid #a4a59c; box-shadow: 1px 1px white; }
+.album-setup > label { display: block; margin-bottom: 7px; }
+.album-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+.album-fields label { display: flex; flex-direction: column; gap: 7px; }
+.album-fields input { width: 100%; }
+#ambience-album-preview { color: #173f83; }
 .prompt-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 19px 0 8px; }
 #prompt-count { font: 8px var(--mono); color: #5e6971; white-space: nowrap; }
 textarea { display: block; width: 100%; min-height: 166px; height: 212px; resize: vertical; padding: 13px; font: 12px/1.8 var(--mono); color: #203349; background: #fffef9; }

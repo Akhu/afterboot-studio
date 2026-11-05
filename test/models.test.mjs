@@ -81,10 +81,14 @@ test('HTTP selects XL before submission, returns to standard, and keeps choices 
     assert.equal(generated.status, 202);
     const track = await generated.json();
     assert.equal(track.input.model, xl);
-    await post(base, '/api/generate', { ...input, model: xl });
+    assert.equal((await post(base, '/api/generate', { ...input, model: xl })).status, 409, 'Pending takes reserve the studio');
+    await post(base, '/api/tracks/' + track.id + '/refresh', {});
+    const second = await (await post(base, '/api/generate', { ...input, model: xl })).json();
     assert.deepEqual(switches, [xl], 'Already loaded model is reused');
-    await post(base, '/api/generate', input);
+    await post(base, '/api/tracks/' + second.id + '/refresh', {});
+    const third = await (await post(base, '/api/generate', input)).json();
     assert.deepEqual(switches, [xl, standard]);
+    await post(base, '/api/tracks/' + third.id + '/refresh', {});
     initFailure = true;
     const rejected = await post(base, '/api/generate', { ...input, model: xl });
     assert.equal((await rejected.json()).errorCode, 'errorModelLoad');
